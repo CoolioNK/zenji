@@ -1,0 +1,34 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Node / Frontend ---
+node_modules/
+dist/
+.vite/
+
+# --- Laufzeitdaten (liegt auf der SSD) ---
+*.db
+*.sqlite3
+logs/
+run/
+*.pid
+
+# --- Geheimnisse / Umgebungsdateien ---
+.env
+backend/.env
+
+# --- System ---
+.DS_Store
+Thumbs.db
+
+# --- Editoren ---
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+/* ZENJI Design-System: dunkles Graphit, dezente Jade-Akzente */
+@theme {
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "SF Pro Text",
+    "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+
+  /* Graphit-Abstufungen */
+  --color-ink-950: #0f1114;
+  --color-ink-900: #14161b;
+  --color-ink-850: #191c22;
+  --color-ink-800: #1e2127;
+  --color-ink-700: #262a32;
+  --color-ink-600: #2f343d;
+  --color-ink-500: #3b414c;
+  --color-ink-400: #565d6b;
+  --color-ink-300: #7b828f;
+  --color-ink-200: #9aa1ad;
+  --color-ink-100: #c3c8d1;
+  --color-ink-50: #e9ebef;
+
+  /* Jade-Akzent */
+  --color-jade-300: #8fdcc2;
+  --color-jade-400: #5ec9a6;
+  --color-jade-500: #46b592;
+  --color-jade-600: #359677;
+  --color-jade-700: #287a60;
+
+  /* Signal */
+  --color-signal-amber: #d19a52;
+  --color-signal-red: #cf6a6a;
+
+  --animate-fade-up: fade-up 0.25s ease-out both;
+  --animate-blink: blink 1s step-end infinite;
+  --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
+  }
+  @keyframes pulse-soft {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ink-900);
+  color: var(--color-ink-100);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Dezente Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-600) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-ink-600);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+textarea {
+  field-sizing: content;
+}
