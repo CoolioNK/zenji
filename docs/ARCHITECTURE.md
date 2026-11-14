@@ -1,9 +1,13 @@
-# ZENJI – Architektur (Phase 1)
+# ZENJI – Architektur (Phase 1 + 2)
 
 ZENJI ist ein **eigenständiges, modulares KI-System**. Das Sprachmodell ist
-nur sein Denk-Kern – Architektur, Steuerung, Persönlichkeit, Parameter-
-verwaltung und zukünftige Erweiterungen gehören zum selbst entwickelten
-ZENJI-System.
+nur sein Generierungskern – Architektur, Steuerung, Persönlichkeit, Regeln,
+Gedächtnis, Kontextverwaltung und zukünftige Erweiterungen gehören zum
+selbst entwickelten ZENJI-System.
+
+**Leitprinzip (Phase 2):** Das Modell erzeugt Antworten. ZENJI entscheidet,
+mit welcher Identität, welchen Regeln, welchen Erinnerungen und welchem
+Kontext diese Antworten entstehen.
 
 ## 1. Schichtenübersicht
 
@@ -11,33 +15,41 @@ ZENJI-System.
 ┌────────────────────────────────────────────────────────────┐
 │ Frontend (React + TypeScript + Vite + Tailwind)             │
 │  Sidebar · Chat · Streaming (SSE) · Einstellungen · Status   │
+│  Control Center: Personality · Policies · Memory · Core      │
 └──────────────────────────────┬─────────────────────────────┘
                                │ HTTP / SSE (/api/*)
 ┌──────────────────────────────▼─────────────────────────────┐
 │ FastAPI (app/api/routes)                                    │
 │  health · models · settings · conversations · chat          │
+│  personality · policies · memory · core (Phase 2)           │
 ├────────────────────────────────────────────────────────────┤
 │ Services (app/services)                                     │
-│  ChatService        Orchestriert Konversation + Kontext +   │
-│                     Engine; persistiert Nachrichten          │
+│  ChatService        Persistenz + LLM-Aufruf; Kontext kommt  │
+│                     vom ZenjiCore (oder Phase-1-Fallback)    │
 │  ConversationService CRUD für mehrere Chats                  │
 │  SettingsService    Laufzeit-Konfiguration (DB ∪ Defaults)   │
+│  ZenjiCore          Orchestrierung aller Engines (Phase 2)  │
 ├────────────────────────────────────────────────────────────┤
 │ Engines (app/engines)                                       │
+│  PersonalityEngine  Profile laden → Persönlichkeitskontext   │
+│  PolicyEngine       Regeln priorisieren, Konflikte, Schutz   │
+│  MemoryEngine       Gedächtnis: CRUD, Suche, Auswahl         │
+│  ContextEngine      Token-Budget, Systemprompt-Compile       │
 │  LLMEngine          Schlanke Fassade: nur Kommunikation      │
 │  ModelManager       Verfügbarkeit, Infos, klare Fehler       │
 │  providers/         Provider-Abstraktion (base.py)           │
 │    └── OllamaProvider (Phase 1)                              │
-│    └── weitere Provider in Phase 2+ registrierbar             │
+│    └── weitere Provider in Phase 3+ registrierbar             │
 ├────────────────────────────────────────────────────────────┤
 │ Datenbank (app/database)                                    │
 │  Database (SQLite/WAL) · ConversationModel · MessageModel    │
-│  SettingModel · Repositories                                 │
+│  SettingModel · PersonalityModel · PolicyModel · MemoryModel │
+│  SchemaVersion · Repositories · Migrationen + Seeds          │
 ├────────────────────────────────────────────────────────────┤
 │ Core (app/core)                                             │
 │  config (Bootstrap) · settings-Validierung · logging         │
 │  storage (SSD-Manager) · exceptions · extensions (Registry)  │
-│  interfaces/ (ABCs für Phase-2-Engines, noch nicht aktiv)    │
+│  interfaces/ (ABCs aller Engines)                            │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -51,23 +63,38 @@ ZENJI-System.
   implementieren `LLMProvider` (in `app/engines/providers/base.py`) und
   registrieren sich in `app/engines/providers/__init__.py`.
 
-## 3. Chat-Datenfluss
+## 3. Chat-Datenfluss (Phase 2)
 
 ```
 Nutzer → POST /api/chat/stream
   1. preflight: Settings laden, Konversation prüfen, Modell prüfen
      → Fehler hier = saubere HTTP-Meldung (503/502/409/404)
   2. Nutzernachricht persistieren
-  3. Kontext: Persona-Systemprompt + Verlauf (max. 50) + Anfrage
-     (Erweiterungspunkt Phase 2: MemoryEngine ergänzt hier Kontexte)
+  3. ZENJI Core orchestriert (prepare_turn):
+     a. Settings laden                      (SettingsService)
+     b. Persönlichkeit laden + kompilieren  (PersonalityEngine)
+     c. Aktive Regeln kompilieren           (PolicyEngine, mit Konfliktreport)
+     d. Relevante Erinnerungen suchen       (MemoryEngine, FTS5/LIKE)
+     e. Verlauf laden                       (ConversationService, max. 50)
+     f. Kontext bauen + Budget prüfen       (ContextEngine, ein Systemprompt)
+     g. Injection-Prüfung der Anfrage       (PolicyEngine.check_incoming,
+                                             fail-soft, nur Flags)
   4. LLMEngine.stream(...) → OllamaProvider → NDJSON → StreamChunk
   5. SSE-Ereignisse: start → delta* → done (oder error)
   6. Assistentennachricht persistieren (auch Teilantworten bei
      Abbruch/Fehlern – der Chatverlauf bleibt konsistent)
+  7. ZENJI Core Nachbereitung (finalize_turn):
+     Merkwörter speichern (source=chat) · last_used_at setzen
 ```
 
 Nicht-streamender Pfad (`POST /api/chat`) nutzt dieselbe Logik mit
 `generate()` statt `stream()`.
+
+**Phase-1-Fallback:** Ohne injizierten Core verhält sich der ChatService
+exakt wie in Phase 1 (Persona-Systemprompt + Verlauf + Anfrage). Der
+Fallback ist bewusst erhalten – Tests und Notfallbetrieb hängen nicht am
+Core. Alle Engines sind fail-soft: Ein Fehler in einem Schritt reduziert
+den Kontext, blockiert aber nie die Antwort.
 
 ## 4. Konfiguration (zwei Ebenen)
 
@@ -92,24 +119,31 @@ Statusmeldungen, ein Crash wird verhindert. Ein SSD-Trennen während des
 Betriebs wird über Schreibfehler erkannt und in `StorageUnavailableError`
 übersetzt.
 
-## 6. Erweiterungspunkte (Phase 2+)
+## 6. Engines (Phase 2 aktiv, Phase 3+ Erweiterung)
 
-`app/interfaces/base.py` definiert stabile ABCs; `app/core/extensions.py`
-enthält die Registry:
+Die Phase-2-Engines sind implementiert und im Chatpfad aktiv:
+
+| Engine | Modul | Dokumentation |
+|---|---|---|
+| `PersonalityEngine` | `app/engines/personality_engine.py` | **PERSONALITY_ENGINE.md** |
+| `PolicyEngine` | `app/engines/policy_engine.py` | **POLICY_ENGINE.md** |
+| `MemoryEngine` | `app/engines/memory_engine.py` | **MEMORY_ENGINE.md** |
+| `ContextEngine` | `app/engines/context_engine.py` | **CONTEXT_ENGINE.md** |
+| `ZenjiCore` (Orchestrierung) | `app/services/zenji_core.py` | ARCHITECTURE.md, §3 |
+
+Zukünftige Engines (Phase 3+):
 
 | Engine | Zweck | Registrierung |
 |---|---|---|
-| `PolicyEngine` | Verhaltensrichtlinien prüfen (in/out) | `registry.register(engine)` |
-| `MemoryEngine` | Langzeitgedächtnis, Kontextanreicherung | wie oben |
-| `WebEngine` | Websuche, Website-Analyse | wie oben |
+| `WebEngine` | Websuche, Website-Analyse | `registry.register(engine)` |
 | `ToolEngine` | Tool Calling (Deklaration + Ausführung) | wie oben |
 | `PluginManager` | dynamische Erweiterungen | wie oben |
 | `RAGEngine` | Dokumentenanalyse/Retrieval | wie oben |
 | `ImageEngine` | Bildverständnis/-generierung | wie oben |
+| `EmbeddingSearchProvider` | semantische Suche fürs Gedächtnis | MemoryEngine |
 
-Der ChatService fragt Engines **fail-soft** ab (`registry.get("policy")`):
-in Phase 1 ist keine registriert, das Verhalten ist identisch. Phase 2 kann
-Engine für Engine aktivieren, ohne den Chat-Pfad umzubauen.
+Alle Engines stehen im `ExtensionRegistry` (fail-soft für Abfragestellen)
+und implementieren das `ZenjiEngine`-Protokoll aus `app/interfaces/base.py`.
 
 ## 7. Fehlerbehandlung
 
@@ -124,5 +158,21 @@ Einheitliches Format `{"error": {"code", "message", "detail"}}`.
 | LLM_RESPONSE_ERROR | 502 | Ungültige Provider-Antwort |
 | MODEL_NOT_FOUND | 409 | Modell nicht geladen (mit Pull-Hinweis) |
 | CONVERSATION_NOT_FOUND | 404 | Unbekannte Konversation |
+| PERSONALITY_NOT_FOUND | 404 | Unbekanntes Persönlichkeitsprofil |
+| PERSONALITY_PROTECTED | 409 | System-/aktives Profil ist geschützt |
+| PERSONALITY_NAME_TAKEN | 409 | Profilname bereits vergeben |
+| POLICY_NOT_FOUND | 404 | Unbekannte Regel |
+| POLICY_SYSTEM_PROTECTED | 403 | Systemregel nicht änderbar/löschbar |
+| POLICY_ID_TAKEN | 409 | Regel-ID bereits vergeben |
+| MEMORY_NOT_FOUND | 404 | Unbekannte Erinnerung |
 | VALIDATION_ERROR | 422 | Ungültige Anfrage/Einstellung |
 | INTERNAL_ERROR | 500 | Unerwarteter Fehler (geloggt) |
+
+## 8. Engine-Dokumentation
+
+Datenflüsse und Zusammenspiel der Engines (Phase 2):
+
+- **PERSONALITY_ENGINE.md** – Profile, Kompilierung, Aktivierung
+- **POLICY_ENGINE.md** – Prioritäten, Konflikte, System-Schutz, Injection
+- **MEMORY_ENGINE.md** – Typen, Suche, Duplikate, Veralten, Merkwörter
+- **CONTEXT_ENGINE.md** – Token-Budget, Systemprompt-Compile, Nachvollziehbarkeit

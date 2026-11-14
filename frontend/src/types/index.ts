@@ -72,3 +72,133 @@ export interface ChatError {
   code: string;
   message: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* Phase 2: Control Center (Personality, Policies, Memory, Core)       */
+/* ------------------------------------------------------------------ */
+
+export interface Personality {
+  id: string;
+  name: string;
+  identity: string;
+  base_personality: string;
+  communication_style: string;
+  formality: number;
+  humor: number;
+  directness: number;
+  creativity: number;
+  response_length: string;
+  language: string;
+  situational_behavior: Record<string, string>;
+  is_system: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonalityPreview {
+  name: string;
+  is_active: boolean;
+  compiled_text: string;
+}
+
+export interface Policy {
+  id: string;
+  name: string;
+  instruction: string;
+  priority: number;
+  enabled: boolean;
+  category: string;
+  scope: string;
+  source: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PolicyConflict {
+  winner_id: string;
+  winner_name: string;
+  dropped_id: string;
+  dropped_name: string;
+  similarity: number;
+  reason: string;
+}
+
+export interface PoliciesResponse {
+  policies: Policy[];
+  conflicts: PolicyConflict[];
+  disabled_count: number;
+}
+
+export interface Memory {
+  id: string;
+  content: string;
+  category: string;
+  memory_type: string;
+  source: string;
+  source_ref: string | null;
+  relevance: number;
+  status: string;
+  supersedes_id: string | null;
+  last_used_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MemoryStats {
+  total: number;
+  active: number;
+  superseded: number;
+  archived: number;
+  by_type: Record<string, number>;
+  categories: [string, number][];
+  search_provider: string;
+}
+
+export interface MemoryListResponse {
+  memories: Memory[];
+  stats: MemoryStats;
+}
+
+export interface MemorySearchResult {
+  memory: Memory;
+  score: number;
+}
+
+export interface CoreStatus {
+  version: string;
+  personality: string | null;
+  personality_id: string | null;
+  active_policies: number;
+  policy_conflicts: number;
+  memories: { total: number; active: number; superseded: number; archived: number };
+  model: string;
+  provider: string;
+  num_ctx: number;
+  num_predict: number;
+}
+
+export interface ContextSection {
+  key: string;
+  title: string;
+  tokens_est: number;
+  included: boolean;
+  truncated: boolean;
+  detail: string;
+}
+
+export interface ContextPreview {
+  sections: ContextSection[];
+  budget_tokens: number;
+  used_tokens: number;
+  usage_ratio: number;
+  history_kept: number;
+  history_dropped: number;
+  memories_kept: number;
+  memories_dropped: number;
+  conflicts: number;
+  flags: string[];
+  system_text: string;
+  messages: { role: string; content: string; chars: number }[];
+  used_memory_ids: string[];
+}

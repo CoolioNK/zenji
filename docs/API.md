@@ -1,4 +1,4 @@
-# ZENJI API (Phase 1)
+# ZENJI API (Phase 1 + 2)
 
 Basis: `http://localhost:8000` · Alle Antworten JSON (UTF-8).
 Fehlerformat einheitlich:
@@ -140,3 +140,164 @@ einheitlichen Fehlerformat – das Frontend zeigt sie sofort an.
 Client-Hinweise: `Cache-Control: no-cache`, kein Puffern
 (`X-Accel-Buffering: no`). Abbruch der Client-Verbindung stoppt die
 Generierung; die Teilantwort bleibt im Verlauf erhalten.
+
+Der Chatpfad nutzt in Phase 2 die volle Orchestrierung (ZenjiCore:
+Persönlichkeit + Regeln + Erinnerungen + Kontext-Budget). Merkwörter
+wie „Merke dir: …" erzeugen nach der Antwort Erinnerungen.
+
+---
+
+# Phase 2: Control Center
+
+## Persönlichkeit (/api/personality)
+
+### GET /api/personality
+Alle Profile, aktives zuerst:
+
+```json
+[{
+  "id": "…", "name": "Neutral", "identity": "Du bist ZENJI …",
+  "base_personality": "neutral", "communication_style": "sachlich",
+  "formality": 0.5, "humor": 0.2, "directness": 0.6, "creativity": 0.5,
+  "response_length": "balanced", "language": "auto",
+  "situational_behavior": {"Fehler oder Unsicherheit": "…"},
+  "is_system": true, "is_active": true,
+  "created_at": "…", "updated_at": "…"
+}]
+```
+
+### POST /api/personality · 201
+Nutzerprofil anlegen. Felder wie oben; Defaults: `base_personality=custom`,
+Skalare 0.2–0.6, `response_length=balanced`, `language=auto`.
+Fehler: `409 PERSONALITY_NAME_TAKEN` · `422 VALIDATION_ERROR`
+(unbekannte Felder werden abgewiesen).
+
+### PATCH /api/personality/{id} · 200
+Teilweise Änderung (alle Felder optional). `is_active: true` aktiviert
+das Profil (genau ein aktives).
+
+### POST /api/personality/{id}/activate · 200
+Aktivieren; deaktiviert alle anderen Profile.
+
+### GET /api/personality/{id}/preview
+Kompilierter Kontextblock: `{name, is_active, compiled_text}`.
+
+### DELETE /api/personality/{id} · 204
+Fehler: `409 PERSONALITY_PROTECTED` (Systemprofil oder aktives Profil).
+
+## Regeln (/api/policies)
+
+### GET /api/policies
+Regelliste inkl. Konfliktbericht und Zähler:
+
+```json
+{
+  "policies": [{
+    "id": "zenji_identity", "name": "ZENJI-Identität",
+    "instruction": "Du bist ZENJI …", "priority": 100,
+    "enabled": true, "category": "identität", "scope": "global",
+    "source": "system", "created_at": "…", "updated_at": "…"
+  }],
+  "conflicts": [{
+    "winner_id": "…", "winner_name": "Kurzhalten B",
+    "dropped_id": "…", "dropped_name": "Kurzhalten A",
+    "similarity": 0.99, "reason": "…"
+  }],
+  "disabled_count": 0
+}
+```
+
+### POST /api/policies · 201
+Nutzerregel anlegen: `{name, instruction, priority=50, enabled=true,
+category="stil", scope="global"}`. `id` optional (sonst ASCII-Slug aus
+Name). `source` ist **nicht** setzbar (422) – Systemregeln entstehen nur
+durch Seeds. Fehler: `409 POLICY_ID_TAKEN`.
+
+### PATCH /api/policies/{id} · 200
+Nutzerregel ändern (alle Felder optional, `priority` wird auf 0–100 geklemmt).
+Fehler: `403 POLICY_SYSTEM_PROTECTED` bei Systemregeln · `404 POLICY_NOT_FOUND`.
+
+### DELETE /api/policies/{id} · 204
+Fehler: `403 POLICY_SYSTEM_PROTECTED` · `404 POLICY_NOT_FOUND`.
+
+## Gedächtnis (/api/memory)
+
+### GET /api/memory
+Erinnerungen (neueste zuerst) + Zähler. Query-Parameter:
+`memory_type` (conversation|long_term|preference|project), `category`,
+`status` (active|superseded|archived, Default `active`), `limit` (1–500).
+
+```json
+{
+  "memories": [{
+    "id": "…", "content": "Der Nutzer heißt Max.", "category": "identität",
+    "memory_type": "preference", "source": "chat", "source_ref": "conv-…",
+    "relevance": 0.8, "status": "active", "supersedes_id": null,
+    "last_used_at": null, "created_at": "…", "updated_at": "…"
+  }],
+  "stats": { "total": 3, "active": 2, "superseded": 1, "archived": 0,
+             "by_type": {"preference": 2}, "categories": [["identität", 2]],
+             "search_provider": "fts5" }
+}
+```
+
+### POST /api/memory · 201
+Anlegen: `{content, category="allgemein", memory_type="long_term",
+relevance=0.5}`. Quelle ist immer `user`. Exakte Duplikate werden
+zusammengeführt (aktualisierte bestehende Erinnerung, `merged`-Verhalten
+intern). Fehler: `422` bei leerem Inhalt/ungültigem Typ/Relevanz außerhalb 0–1.
+
+### POST /api/memory/search
+```json
+{ "query": "Python FastAPI", "memory_type": null, "category": null, "limit": 20 }
+```
+→ `[{ "memory": {…}, "score": 0.73 }]` (FTS5/LIKE, nur aktive Erinnerungen).
+
+### GET /api/memory/{id}
+Einzelabruf; `404 MEMORY_NOT_FOUND` bei unbekannter ID.
+
+### PATCH /api/memory/{id} · 200
+Änderbar: `content`, `category`, `memory_type`, `relevance`, `status`
+(active|superseded|archived – Archivieren/Löschen ist Nutzerentscheidung).
+
+### DELETE /api/memory/{id} · 204
+Löscht Erinnerung **und** FTS-Index-Eintrag endgültig.
+
+## Kern (/api/core)
+
+### GET /api/core/status
+Zentrale Zustände für das Control Center:
+
+```json
+{
+  "version": "0.2.0",
+  "personality": "Neutral", "personality_id": "…",
+  "active_policies": 6, "policy_conflicts": 0,
+  "memories": { "total": 3, "active": 2, "superseded": 1, "archived": 0,
+                "by_type": {}, "search_provider": "fts5" },
+  "model": "qwen3:8b", "provider": "ollama",
+  "num_ctx": 8192, "num_predict": 2048
+}
+```
+
+### GET /api/core/context-preview
+Nachvollziehbarer Kontext-Entwurf **ohne LLM-Aufruf**. Query:
+`message` (Default „Was kannst du?"), `conversation_id` (optional – mit
+Verlauf aus dieser Konversation).
+
+```json
+{
+  "sections": [ { "key": "identity", "title": "identity", "tokens_est": 58,
+                  "included": true, "truncated": false, "detail": "" }, … ],
+  "budget_tokens": 5888, "used_tokens": 812, "usage_ratio": 0.138,
+  "history_kept": 4, "history_dropped": 2,
+  "memories_kept": 2, "memories_dropped": 0, "conflicts": 1,
+  "flags": [],
+  "system_text": "## Identität\n…",
+  "messages": [ { "role": "system", "content": "…(gekürzt)", "chars": 2310 } ],
+  "used_memory_ids": ["…"]
+}
+```
+
+Damit ist jede Anfrage vollständig erklärenbar: welche Abschnitte,
+wie viele Tokens, welche Erinnerungen im Kontext waren.

@@ -15,6 +15,7 @@ export function Sidebar({
   onRename,
   onDelete,
   onOpenSettings,
+  onOpenControl,
 }: {
   conversations: Conversation[];
   conversationsError: string | null;
@@ -25,6 +26,7 @@ export function Sidebar({
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onOpenSettings: () => void;
+  onOpenControl: () => void;
 }) {
   return (
     <aside className="flex h-full w-[280px] shrink-0 flex-col border-r border-ink-700 bg-ink-850">
@@ -58,6 +60,18 @@ export function Sidebar({
       </nav>
 
       <div className="space-y-3 border-t border-ink-700 px-4 py-4">
+        <button
+          onClick={onOpenControl}
+          className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-[13px] text-ink-200 transition-colors hover:bg-ink-800 hover:text-ink-50"
+        >
+          <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+            <rect x="2.5" y="2.5" width="6" height="6" rx="1.2" />
+            <rect x="11.5" y="2.5" width="6" height="6" rx="1.2" />
+            <rect x="2.5" y="11.5" width="6" height="6" rx="1.2" />
+            <rect x="11.5" y="11.5" width="6" height="6" rx="1.2" />
+          </svg>
+          Control Center
+        </button>
         <button
           onClick={onOpenSettings}
           className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-[13px] text-ink-200 transition-colors hover:bg-ink-800 hover:text-ink-50"

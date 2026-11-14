@@ -1,9 +1,10 @@
-/* Seitenlayout: Sidebar + Chatbereich + Einstellungen-Schublade. */
+/* Seitenlayout: Sidebar + Chatbereich + Control Center + Einstellungen-Schublade. */
 
 import { useCallback, useState } from "react";
 import { ChatArea } from "../components/ChatArea";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { Sidebar } from "../components/Sidebar";
+import { ControlCenter } from "../components/control/ControlCenter";
 import { useChat } from "../hooks/useChat";
 import { useConversations } from "../hooks/useConversations";
 import { useHealth } from "../hooks/useHealth";
@@ -12,6 +13,7 @@ import { useSettings } from "../hooks/useSettings";
 export function ChatPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [controlOpen, setControlOpen] = useState(false);
 
   const health = useHealth();
   const { conversations, error: conversationsError, refresh, rename, remove } = useConversations();
@@ -66,6 +68,7 @@ export function ChatPage() {
         }}
         onDelete={handleDelete}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenControl={() => setControlOpen(true)}
       />
 
       <ChatArea
@@ -85,6 +88,12 @@ export function ChatPage() {
         onClose={() => setSettingsOpen(false)}
         onLoad={() => void settings.load()}
         onSave={(patch) => void handleSaveSettings(patch)}
+      />
+
+      <ControlCenter
+        open={controlOpen}
+        activeConversationId={activeId}
+        onClose={() => setControlOpen(false)}
       />
     </div>
   );

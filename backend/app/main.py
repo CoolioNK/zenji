@@ -27,12 +27,18 @@ from app.core.extensions import ExtensionRegistry
 from app.core.logging import get_logger, setup_logging
 from app.core.storage import StorageManager
 from app.database.database import Database
+from app.database.migrations import run_migrations
+from app.engines.context_engine import ContextEngine
 from app.engines.llm_engine import LLMEngine
+from app.engines.memory_engine import MemoryEngine
+from app.engines.personality_engine import PersonalityEngine
+from app.engines.policy_engine import PolicyEngine
 from app.engines.providers import create_provider
 from app.engines.providers.base import LLMProvider
 from app.services.chat_service import ChatService
 from app.services.conversation_service import ConversationService
 from app.services.settings_service import SettingsService
+from app.services.zenji_core import ZenjiCore
 
 log = get_logger("main")
 
@@ -70,7 +76,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     database: Database = state.database
     try:
         database.create_schema()
-        log.info("Datenbank bereit: %s", database.db_path)
+        # Phase 2: Migrationen (Schema-Stufen) und Suchindex initialisieren.
+        version = run_migrations(database.engine)
+        log.info("Datenbank bereit (Schema-Stufe %d): %s", version, database.db_path)
+        memory_engine: MemoryEngine = state.memory_engine
+        with database.session() as session:
+            memory_engine.init_search(session)
     except ZenjiError as exc:
         log.warning("Datenbank nicht verfügbar: %s", exc.message)
 
@@ -100,10 +111,28 @@ def create_app(
     conversation_service = ConversationService()
     extensions = ExtensionRegistry()
 
+    # Phase 2: Engines + ZENJI Core (alle fail-soft, registriert im Registry).
+    personality_engine = PersonalityEngine()
+    policy_engine = PolicyEngine()
+    memory_engine = MemoryEngine()
+    context_engine = ContextEngine()
+    zenji_core = ZenjiCore(
+        settings_service=settings_service,
+        conversation_service=conversation_service,
+        personality_engine=personality_engine,
+        policy_engine=policy_engine,
+        memory_engine=memory_engine,
+        context_engine=context_engine,
+    )
+    extensions.register(personality_engine)
+    extensions.register(policy_engine)
+    extensions.register(memory_engine)
+    extensions.register(context_engine)
+
     app = FastAPI(
         title="ZENJI API",
         version=__version__,
-        description="Modulares KI-System – Phase 1: Fundament, lokale KI, modulare Architektur.",
+        description="Modulares KI-System – Phase 2: Core Intelligence (Persönlichkeit, Regeln, Gedächtnis, Kontext).",
         lifespan=lifespan,
     )
 
@@ -122,6 +151,11 @@ def create_app(
     app.state.extensions = extensions
     app.state.settings_service = settings_service
     app.state.conversation_service = conversation_service
+    app.state.personality_engine = personality_engine
+    app.state.policy_engine = policy_engine
+    app.state.memory_engine = memory_engine
+    app.state.context_engine = context_engine
+    app.state.zenji_core = zenji_core
 
     provider_config = {
         "base_url": settings.ollama_base_url,
@@ -135,6 +169,7 @@ def create_app(
         settings_service=settings_service,
         conversation_service=conversation_service,
         extensions=extensions,
+        core=zenji_core,
     )
     app.state.llm_engine = engine
     app.state.chat_service = chat_service

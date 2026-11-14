@@ -4,11 +4,13 @@ Ablauf (streamend und nicht-streamend identisch):
 
 1. Konversation ermitteln (bzw. automatisch neu anlegen)
 2. Nutzernachricht persistieren
-3. Kontextfenster bauen: Persona-Systemprompt + Verlauf + neue Anfrage
-   (Erweiterungspunkt Phase 2: MemoryEngine ergänzt hier Erinnerungen,
-    PolicyEngine prüft die Anfrage vor dem Senden – beide fail-soft)
+3. Kontextfenster bauen:
+   - **mit ZenjiCore (Phase 2)**: Core orchestriert Persönlichkeit, Regeln,
+     Erinnerungen und Context Engine (Schritte 1–7 der Spezifikation)
+   - **ohne Core (Phase-1-Fallback)**: Persona-Systemprompt + Verlauf + Anfrage
 4. LLM Engine aufrufen (nur Kommunikation, keine Logik)
 5. Antwort streamen bzw. komplett zurückgeben und speichern
+6. Mit Core: Gedächtnis-Nachbereitung (Merkmuster, ``last_used_at``)
 
 Fehler werden klar differenziert: fehlende SSD (503), fehlende Ollama-
 Verbindung (502), fehlendes Modell (409) – das Frontend zeigt jeweils eine
@@ -33,6 +35,7 @@ from app.schemas.chat import ChatRequest
 from app.schemas.conversation import MessageOut
 from app.services.conversation_service import ConversationService
 from app.services.settings_service import SettingsService
+from app.services.zenji_core import ZenjiCore
 
 if TYPE_CHECKING:  # pragma: no cover
     from app.services.settings_service import SettingsService as _S
@@ -61,12 +64,17 @@ class ChatService:
         settings_service: SettingsService,
         conversation_service: ConversationService | None = None,
         extensions: ExtensionRegistry | None = None,
+        core: ZenjiCore | None = None,
     ) -> None:
         self._db = database
         self._engine = engine
         self._settings = settings_service
         self._conversations = conversation_service or ConversationService()
         self._extensions = extensions or ExtensionRegistry()
+        # Phase 2: Mit Core = vollständige Orchestrierung (Persönlichkeit,
+        # Regeln, Gedächtnis, Context Engine).  Ohne Core = Phase-1-Verhalten
+        # (Persona-Systemprompt + Verlauf) – wichtig für Kompatibilität/Tests.
+        self._core = core
 
     # --- Vorabprüfung (für API-Routen) -----------------------------------------------
     async def preflight(self, request: ChatRequest) -> None:
@@ -119,17 +127,35 @@ class ChatService:
                 user_model = self._conversations.add_message(
                     session, conversation_id, "user", request.message
                 )
-                context = self._build_context(
-                    session, conversation_id, request.message,
-                    persona=settings.persona.system_prompt,
-                    exclude_ids={user_model.id},
-                )
+                if self._core is not None:
+                    # Phase-2-Pfad: ZenjiCore orchestriert alle Engines.
+                    prepared = await self._core.prepare_turn(
+                        session,
+                        conversation_id=conversation_id,
+                        user_message=request.message,
+                        exclude_ids={user_model.id},
+                    )
+                    context = prepared.messages
+                else:
+                    context = self._build_context(
+                        session, conversation_id, request.message,
+                        persona=settings.persona.system_prompt,
+                        exclude_ids={user_model.id},
+                    )
                 content, _meta = await self._engine.generate(
                     context, options, model=model, keep_alive=self._settings.keep_alive(settings)
                 )
                 assistant_model = self._conversations.add_message(
                     session, conversation_id, "assistant", content
                 )
+                if self._core is not None:
+                    self._core.finalize_turn(
+                        session,
+                        conversation_id=conversation_id,
+                        user_text=request.message,
+                        assistant_text=content,
+                        used_memory_ids=prepared.used_memory_ids,
+                    )
                 return ChatTurn(
                     conversation_id=conversation_id,
                     user_message=MessageOut.model_validate(user_model),
@@ -158,11 +184,23 @@ class ChatService:
             )
             user_id = user_model.id
             options = self._settings.llm_options(settings)
-            context = self._build_context(
-                session, conversation_id, request.message,
-                persona=settings.persona.system_prompt,
-                exclude_ids={user_id},
-            )
+            if self._core is not None:
+                # Phase-2-Pfad: ZenjiCore orchestriert alle Engines.
+                prepared = await self._core.prepare_turn(
+                    session,
+                    conversation_id=conversation_id,
+                    user_message=request.message,
+                    exclude_ids={user_id},
+                )
+                context = prepared.messages
+                used_memory_ids = prepared.used_memory_ids
+            else:
+                context = self._build_context(
+                    session, conversation_id, request.message,
+                    persona=settings.persona.system_prompt,
+                    exclude_ids={user_id},
+                )
+                used_memory_ids = []
 
         yield self._sse("start", {
             "conversation_id": conversation_id,
@@ -189,6 +227,14 @@ class ChatService:
                     session, conversation_id, "assistant", content
                 )
                 assistant_id = assistant_model.id
+                if self._core is not None:
+                    self._core.finalize_turn(
+                        session,
+                        conversation_id=conversation_id,
+                        user_text=request.message,
+                        assistant_text=content,
+                        used_memory_ids=used_memory_ids,
+                    )
 
             yield self._sse("done", {
                 "conversation_id": conversation_id,

@@ -99,3 +99,55 @@ class ValidationError(ZenjiError):
 
     status_code = 422
     code = "VALIDATION_ERROR"
+
+
+# --- Phase 2: Personality / Policy / Memory --------------------------------------
+
+
+class PersonalityNotFoundError(ZenjiError):
+    """Das angeforderte Persönlichkeitsprofil existiert nicht."""
+
+    status_code = 404
+    code = "PERSONALITY_NOT_FOUND"
+
+
+class PersonalityProtectedError(ZenjiError):
+    """Systemprofil oder aktives Profil darf nicht gelöscht werden."""
+
+    status_code = 409
+    code = "PERSONALITY_PROTECTED"
+
+
+class PersonalityNameTakenError(ZenjiError):
+    """Ein Profil mit diesem Namen existiert bereits."""
+
+    status_code = 409
+    code = "PERSONALITY_NAME_TAKEN"
+
+
+class PolicyNotFoundError(ZenjiError):
+    """Die angeforderte Regel existiert nicht."""
+
+    status_code = 404
+    code = "POLICY_NOT_FOUND"
+
+
+class PolicyProtectedError(ZenjiError):
+    """Systemregeln dürfen nicht über die API geändert/gelöscht werden."""
+
+    status_code = 403
+    code = "POLICY_SYSTEM_PROTECTED"
+
+
+class PolicyIdTakenError(ZenjiError):
+    """Eine Regel mit dieser ID existiert bereits."""
+
+    status_code = 409
+    code = "POLICY_ID_TAKEN"
+
+
+class MemoryNotFoundError(ZenjiError):
+    """Die angeforderte Erinnerung existiert nicht."""
+
+    status_code = 404
+    code = "MEMORY_NOT_FOUND"

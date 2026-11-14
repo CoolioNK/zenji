@@ -14,8 +14,11 @@ dist/
 .vite/
 
 # --- Laufzeitdaten (liegt auf der SSD) ---
+data/
 *.db
 *.sqlite3
+*.db-wal
+*.db-shm
 logs/
 run/
 *.pid

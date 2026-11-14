@@ -1,6 +1,22 @@
 /* Zentrale REST-Client-Wrapper für die ZENJI-API. */
 
-import type { ApiErrorBody, Conversation, Health, Message, ModelEntry, Settings } from "../types";
+import type {
+  ApiErrorBody,
+  Conversation,
+  Health,
+  Memory,
+  MemoryListResponse,
+  MemorySearchResult,
+  Message,
+  ModelEntry,
+  Personality,
+  PersonalityPreview,
+  PoliciesResponse,
+  Policy,
+  Settings,
+  ContextPreview,
+  CoreStatus,
+} from "../types";
 
 /* Fachlicher Fehler mit Code aus der API ({"error": {code, message}}). */
 export class ApiError extends Error {
@@ -72,6 +88,52 @@ export const api = {
       "/api/chat",
       { conversation_id: conversationId ?? undefined, message },
     ),
+
+  /* Phase 2: Control Center -------------------------------------------- */
+  personalities: () => getJson<Personality[]>("/api/personality"),
+  createPersonality: (body: Record<string, unknown>) =>
+    postJson<Personality>("/api/personality", body),
+  updatePersonality: (id: string, patch: Record<string, unknown>) =>
+    patchJson<Personality>(`/api/personality/${id}`, patch),
+  activatePersonality: (id: string) =>
+    postJson<Personality>(`/api/personality/${id}/activate`, {}),
+  deletePersonality: (id: string) => deleteRequest(`/api/personality/${id}`),
+  previewPersonality: (id: string) =>
+    getJson<PersonalityPreview>(`/api/personality/${id}/preview`),
+
+  policies: () => getJson<PoliciesResponse>("/api/policies"),
+  createPolicy: (body: Record<string, unknown>) =>
+    postJson<Policy>("/api/policies", body),
+  updatePolicy: (id: string, patch: Record<string, unknown>) =>
+    patchJson<Policy>(`/api/policies/${id}`, patch),
+  deletePolicy: (id: string) => deleteRequest(`/api/policies/${id}`),
+
+  memories: (params: { memory_type?: string; category?: string; status?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (params.memory_type) query.set("memory_type", params.memory_type);
+    if (params.category) query.set("category", params.category);
+    if (params.status) query.set("status", params.status);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return getJson<MemoryListResponse>(`/api/memory${suffix}`);
+  },
+  createMemory: (body: Record<string, unknown>) => postJson<Memory>("/api/memory", body),
+  updateMemory: (id: string, patch: Record<string, unknown>) =>
+    patchJson<Memory>(`/api/memory/${id}`, patch),
+  deleteMemory: (id: string) => deleteRequest(`/api/memory/${id}`),
+  searchMemories: (query: string, memoryType?: string, category?: string) =>
+    postJson<MemorySearchResult[]>("/api/memory/search", {
+      query,
+      memory_type: memoryType || undefined,
+      category: category || undefined,
+      limit: 20,
+    }),
+
+  coreStatus: () => getJson<CoreStatus>("/api/core/status"),
+  contextPreview: (message: string, conversationId?: string | null) => {
+    const params = new URLSearchParams({ message });
+    if (conversationId) params.set("conversation_id", conversationId);
+    return getJson<ContextPreview>(`/api/core/context-preview?${params.toString()}`);
+  },
 };
 
 /** Startet den SSE-Stream. Aufrufer liest Events via streamSSE(). */
