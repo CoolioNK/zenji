@@ -23,10 +23,16 @@ export function useChat(
   const [status, setStatus] = useState<ChatStatus>("idle");
   const [error, setError] = useState<ChatError | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  /* Läuft gerade ein Senden, darf der Verlauflader die lokalen
+     Nachrichten nicht löschen (Sonst-Race: conversation_id wechselt
+     beim Start-Event null → id und die Deltas würden verworfen). */
+  const inFlightRef = useRef(false);
 
   /* Verlauf laden, wenn eine Konversation gewählt wird. */
   useEffect(() => {
     let cancelled = false;
+    if (inFlightRef.current) return; // Stream in Arbeit: Zustand behalten
+
     setError(null);
     setMessages([]);
 
@@ -86,6 +92,8 @@ export function useChat(
 
       const controller = new AbortController();
       abortRef.current = controller;
+      inFlightRef.current = true;
+      const isNewConversation = conversationId === null;
 
       const appendTo = (id: string, delta: string) => {
         setMessages((prev) =>
@@ -122,6 +130,10 @@ export function useChat(
               (sse.data.assistant_message_id as string) ?? null,
               (sse.data.content as string) ?? "",
             );
+            if (isNewConversation && createdConversationId) {
+              /* Konversationsliste aktualisieren (Nachrichtenzähler). */
+              onConversationCreated(createdConversationId);
+            }
           } else if (sse.event === "error") {
             throw new StreamedError(
               (sse.data.code as string) ?? "LLM_ERROR",
@@ -133,7 +145,15 @@ export function useChat(
         /* Server-IDs übernehmen (Nutzer-Nachricht). */
         if (serverUserId) {
           setMessages((prev) =>
-            prev.map((m) => (m.id === localUser.id ? { ...m, id: serverUserId as string } : m)),
+            prev.map((m) =>
+              m.id === localUser.id
+                ? {
+                    ...m,
+                    id: serverUserId as string,
+                    conversation_id: createdConversationId ?? m.conversation_id,
+                  }
+                : m,
+            ),
           );
         }
       } catch (exc) {
@@ -153,6 +173,7 @@ export function useChat(
         }
       } finally {
         abortRef.current = null;
+        inFlightRef.current = false;
         setStatus("idle");
       }
     },
