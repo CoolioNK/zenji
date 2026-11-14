@@ -29,6 +29,16 @@ if pgrep -x ollama >/dev/null 2>&1; then
     sleep 1
 fi
 
+# macOS: Auch die Menüleisten-App beenden – sie startet den Server sonst
+# automatisch neu (mit Standard-OLLAMA_MODELS auf dem internen Datenträger).
+osascript -e 'tell application "Ollama" to quit' >/dev/null 2>&1 || true
+pkill -f "Ollama.app/Contents/MacOS/Ollama" 2>/dev/null || true
+sleep 1
+if pgrep -f "Ollama.app/Contents/MacOS/Ollama" >/dev/null 2>&1; then
+    pkill -9 -f "Ollama.app/Contents/MacOS/Ollama" 2>/dev/null || true
+    sleep 1
+fi
+
 say "→ Starte Ollama mit OLLAMA_MODELS=$OLLAMA_MODELS_DIR"
 OLLAMA_MODELS="$OLLAMA_MODELS_DIR" nohup ollama serve > "$LOG_DIR/ollama.log" 2>&1 &
 echo $! > "$RUN_DIR/ollama.pid"
