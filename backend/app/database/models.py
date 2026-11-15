@@ -133,6 +133,15 @@ class PersonalityModel(Base):
     humor: Mapped[float] = mapped_column(default=0.2)
     directness: Mapped[float] = mapped_column(default=0.6)
     creativity: Mapped[float] = mapped_column(default=0.5)
+    # v0.3.0 (Begleiter-Persönlichkeit): sechs zusätzliche Eigenschaftsachsen.
+    # Werte bleiben 0–1 (UI zeigt Prozent) – Migration 2→3 ergänzt die Spalten
+    # idempotent für bestehende Datenbanken.
+    sarcasm: Mapped[float] = mapped_column(default=0.3)
+    cheekiness: Mapped[float] = mapped_column(default=0.4)
+    friendliness: Mapped[float] = mapped_column(default=0.7)
+    empathy: Mapped[float] = mapped_column(default=0.6)
+    curiosity: Mapped[float] = mapped_column(default=0.6)
+    initiative: Mapped[float] = mapped_column(default=0.5)
     response_length: Mapped[str] = mapped_column(String(20), default="balanced")
     language: Mapped[str] = mapped_column(String(40), default="auto")
     situational_behavior: Mapped[str] = mapped_column(Text, default="{}")

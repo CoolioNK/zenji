@@ -100,9 +100,12 @@ Löscht Konversation **und** Nachrichten (Kaskade) → `204`.
 
 ## POST /api/chat
 
-Nicht-streamend. Body: `{"conversation_id": "optional", "message": "…"}`.
+Nicht-streamend. Body: `{"conversation_id": "optional", "message": "…", "mode": "optional"}`.
 Ohne `conversation_id` wird automatisch eine Konversation angelegt
-(Titel = Anfang der ersten Nachricht).
+(Titel = Anfang der ersten Nachricht). `mode` erzwingt einen
+Kommunikationsmodus (`casual|roast|focus|empathy|open_talk`, v0.3.0); ohne
+`mode` wählt der CommunicationManager automatisch (siehe
+**COMMUNICATION_MODES.md**). Unbekannter Modus → `422`.
 
 ```json
 {
@@ -156,9 +159,11 @@ Alle Profile, aktives zuerst:
 
 ```json
 [{
-  "id": "…", "name": "Neutral", "identity": "Du bist ZENJI …",
-  "base_personality": "neutral", "communication_style": "sachlich",
-  "formality": 0.5, "humor": 0.2, "directness": 0.6, "creativity": 0.5,
+  "id": "…", "name": "Zenji", "identity": "Du bist ZENJI …",
+  "base_personality": "friendly", "communication_style": "locker, frech …",
+  "formality": 0.15, "humor": 0.9, "sarcasm": 0.65, "cheekiness": 0.75,
+  "directness": 0.95, "friendliness": 0.9, "empathy": 0.85,
+  "curiosity": 0.9, "initiative": 0.85, "creativity": 0.8,
   "response_length": "balanced", "language": "auto",
   "situational_behavior": {"Fehler oder Unsicherheit": "…"},
   "is_system": true, "is_active": true,
@@ -270,23 +275,31 @@ Zentrale Zustände für das Control Center:
 
 ```json
 {
-  "version": "0.2.0",
-  "personality": "Neutral", "personality_id": "…",
-  "active_policies": 6, "policy_conflicts": 0,
+  "version": "0.3.0",
+  "personality": "Zenji", "personality_id": "…",
+  "active_policies": 8, "policy_conflicts": 0,
   "memories": { "total": 3, "active": 2, "superseded": 1, "archived": 0,
                 "by_type": {}, "search_provider": "fts5" },
   "model": "qwen3:8b", "provider": "ollama",
-  "num_ctx": 8192, "num_predict": 2048
+  "num_ctx": 8192, "num_predict": 2048,
+  "communication_modes": [
+    { "key": "casual", "label": "Casual" }, { "key": "roast", "label": "Roast" },
+    { "key": "focus", "label": "Fokus" }, { "key": "empathy", "label": "Empathie" },
+    { "key": "open_talk", "label": "Open Talk" }
+  ],
+  "communication_default_mode": "casual"
 }
 ```
 
 ### GET /api/core/context-preview
 Nachvollziehbarer Kontext-Entwurf **ohne LLM-Aufruf**. Query:
 `message` (Default „Was kannst du?"), `conversation_id` (optional – mit
-Verlauf aus dieser Konversation).
+Verlauf aus dieser Konversation), `mode` (optional – erzwingt einen
+Kommunikationsmodus im Entwurf).
 
 ```json
 {
+  "mode": "casual",
   "sections": [ { "key": "identity", "title": "identity", "tokens_est": 58,
                   "included": true, "truncated": false, "detail": "" }, … ],
   "budget_tokens": 5888, "used_tokens": 812, "usage_ratio": 0.138,

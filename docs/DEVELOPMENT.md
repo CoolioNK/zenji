@@ -39,34 +39,50 @@ ZENJI_SSD_ROOT=$(mktemp -d) ../.venv/bin/uvicorn app.main:app --port 8000
 ## Phase 2: Migrationen und Seeds
 
 Die Datenbank versioniert sich selbst (`PRAGMA user_version` + Tabelle
-`schema_version`, aktuelle Stufe **2**):
+`schema_version`, aktuelle Stufe **3**):
 
 - `app/database/migrations.py`: `run_migrations(engine)` läuft beim
   App-Start (Lifespan), ist **idempotent** und nur additiv — bestehende
   Konversationen/Nachrichten/Einstellungen bleiben unverändert.
 - Seeds (idempotent, keine Nutzerdaten-Überschreibung):
-  - `app/config/personalities.json` → 4 Systemprofile (Neutral aktiv)
-  - `app/config/system_policies.json` → 5 Systemregeln + 1 Nutzerregel
+  - `app/config/personalities.json` → 5 Systemprofile (Zenji aktiv,
+    Begleiter-Persönlichkeit v0.3.0)
+  - `app/config/system_policies.json` → 7 Systemregeln + 1 Nutzerregel
+  - `app/config/communication_modes.json` → 5 Kommunikationsmodi
+    (kein DB-Seed, direkter Import in der CommunicationEngine)
+- Migration **2→3 (v0.3.0)**: ergänzt sechs Persönlichkeits-Achsen per
+  idempotentem `ALTER TABLE` (PRAGMA-Prüfung), aktualisiert die Texte
+  geschützter Systemregeln und die neuen Achsen von Systemprofilen aus
+  den Seeds, seeden additiv nach und aktiviert „Zenji" — aber nur, wenn
+  aktiv gar nichts oder nur das Seed-Standardprofil „Neutral" läuft.
+  Ein angepasster Persona-Prompt (Settings) wird nur bei **exakt** dem
+  v0.2.0-Default ersetzt (`LEGACY_PERSONA`-Match).
 - `MemoryEngine.init_search(session)` richtet FTS5 (`memories_fts`)
   ein; fehlt FTS5, nutzt die Suche automatisch den LIKE-Provider.
 - Migrationstests simulieren eine Phase-1-Datenbank (Tabellen-Drop,
-  `user_version=0`) und prüfen, dass Konversationen erhalten bleiben.
+  `user_version=0`) und prüfen, dass Konversationen erhalten bleiben;
+  `test_companion_personality.py` simuliert eine Phase-2-Datenbank
+  (`user_version=2`) und prüft die 2→3-Überführung inklusive
+  Nutzerwahl-Schutz.
 
-Neue Tabellen/Spalten in Phase 3: `create_schema()` (`create_all`) legt
-fehlendes an, eine neue Migrationsstufe füllt/transformiert,
-`LATEST_VERSION` + Test erhöhen.
+Neue Tabellen/Spalten: `create_schema()` (`create_all`) legt fehlendes
+an, eine neue Migrationsstufe füllt/transformiert, `LATEST_VERSION` +
+Test erhöhen.
 
-## Teststruktur (Phase 2)
+## Teststruktur (Phase 2 + v0.3.0)
 
 | Datei | Fokus |
 |---|---|
 | `test_migrations.py` | Schema-Stufen, Seeds idempotent, Phase-1-Datenerhalt |
-| `test_personality_engine.py` | CRUD, Aktivierung, Schutz, Kompilierung |
+| `test_personality_engine.py` | CRUD, Aktivierung, Schutz, Kompilierung (10 Achsen) |
+| `test_communication_engine.py` | Moduswahl, Priorität, Override, Direktiven, Fail-soft |
+| `test_companion_personality.py` | Zenji-Seed, Migration 2→3, Persistenz, Modell-Unabhängigkeit |
+| `test_chat_modes.py` | Repräsentative Gespräche: Modi im echten Chatpfad |
 | `test_policy_engine.py` | Sortierung, Konflikte, System-Schutz, Injection-Flags |
 | `test_memory_engine.py` | Dedupe, Veralten/Konflikt, Suche, Merkwörter |
 | `test_context_engine.py` | Budget, Abschnitte, Verlaufskürzung, Datenblöcke |
 | `test_zenji_core.py` | Orchestrierung, Fallback ohne Core, Nachbereitung |
-| `test_api_phase2.py` | Alle neuen Endpunkte + Chat-Integration |
+| `test_api_phase2.py` | Alle Endpunkte + Chat-Integration |
 
 Der LLM ist gemockt (`FakeProvider`); Tests laufen ohne Netz, Modell
 und geladene Gewichte (~1.4 s gesamt).

@@ -5,6 +5,15 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class CommunicationModeOut(BaseModel):
+    """Ein verfügbarer Kommunikationsmodus (v0.3.0)."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    key: str
+    label: str
+
+
 class CoreStatusOut(BaseModel):
     """``GET /api/core/status`` – zentrale Kern-Zustände."""
 
@@ -20,6 +29,8 @@ class CoreStatusOut(BaseModel):
     provider: str
     num_ctx: int
     num_predict: int
+    communication_modes: list[CommunicationModeOut] = Field(default_factory=list)
+    communication_default_mode: str = ""
 
 
 class ContextSectionOut(BaseModel):
@@ -63,3 +74,4 @@ class ContextPreviewOut(BaseModel):
     system_text: str
     messages: list[ContextMessagePreview]
     used_memory_ids: list[str] = Field(default_factory=list)
+    mode: str | None = None

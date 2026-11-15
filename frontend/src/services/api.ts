@@ -2,6 +2,7 @@
 
 import type {
   ApiErrorBody,
+  CommunicationModeKey,
   Conversation,
   Health,
   Memory,
@@ -141,11 +142,16 @@ export async function openChatStream(
   conversationId: string | null,
   message: string,
   signal?: AbortSignal,
+  mode?: CommunicationModeKey | null,
 ): Promise<Response> {
   const response = await fetch("/api/chat/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify({ conversation_id: conversationId ?? undefined, message }),
+    body: JSON.stringify({
+      conversation_id: conversationId ?? undefined,
+      message,
+      mode: mode || undefined,
+    }),
     signal,
   });
   if (!response.ok) throw await parseError(response);

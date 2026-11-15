@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, openChatStream, ApiError } from "../services/api";
 import { streamSSE } from "../services/sse";
-import type { ChatError, Message } from "../types";
+import type { ChatError, CommunicationModeKey, Message } from "../types";
 
 export type ChatStatus = "idle" | "loading-history" | "streaming";
 
@@ -11,7 +11,7 @@ export interface ChatState {
   messages: Message[];
   status: ChatStatus;
   error: ChatError | null;
-  send: (text: string) => Promise<void>;
+  send: (text: string, mode?: CommunicationModeKey | null) => Promise<void>;
   stop: () => void;
 }
 
@@ -66,7 +66,7 @@ export function useChat(
   }, []);
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, mode?: CommunicationModeKey | null) => {
       const trimmed = text.trim();
       if (!trimmed || status === "streaming") return;
       setError(null);
@@ -111,7 +111,12 @@ export function useChat(
       };
 
       try {
-        const response = await openChatStream(conversationId, trimmed, controller.signal);
+        const response = await openChatStream(
+          conversationId,
+          trimmed,
+          controller.signal,
+          mode ?? null,
+        );
         let createdConversationId: string | null = conversationId;
         let serverUserId: string | null = null;
 

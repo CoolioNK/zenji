@@ -85,7 +85,13 @@ export interface Personality {
   communication_style: string;
   formality: number;
   humor: number;
+  sarcasm: number;
+  cheekiness: number;
   directness: number;
+  friendliness: number;
+  empathy: number;
+  curiosity: number;
+  initiative: number;
   creativity: number;
   response_length: string;
   language: string;
@@ -176,6 +182,8 @@ export interface CoreStatus {
   provider: string;
   num_ctx: number;
   num_predict: number;
+  communication_modes: { key: string; label: string }[];
+  communication_default_mode: string;
 }
 
 export interface ContextSection {
@@ -201,4 +209,16 @@ export interface ContextPreview {
   system_text: string;
   messages: { role: string; content: string; chars: number }[];
   used_memory_ids: string[];
+  mode: string | null;
+}
+
+/* ------------------------------------------------------------------ */
+/* v0.3.0: Begleiter-Persönlichkeit (Kommunikationsmodi)               */
+/* ------------------------------------------------------------------ */
+
+export type CommunicationModeKey = "casual" | "roast" | "focus" | "empathy" | "open_talk";
+
+export interface CommunicationModeInfo {
+  key: CommunicationModeKey;
+  label: string;
 }

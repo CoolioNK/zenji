@@ -1,10 +1,10 @@
-# Context Engine (Phase 2)
+# Context Engine (Phase 2 + v0.3.0)
 
 Die Context Engine ist die **letzte Instanz vor dem Modell**: Sie
-kompiliert Identität, Persönlichkeit, Regeln, Erinnerungen, Verlauf und
-die aktuelle Anfrage zu exakt der Nachrichtenliste, die ZENJI an das
-Sprachmodell sendet – deterministisch, budget-begrenzt und vollständig
-nachvollziehbar.
+kompiliert Identität, Persönlichkeit, Kommunikationsmodus, Regeln,
+Erinnerungen, Verlauf und die aktuelle Anfrage zu exakt der
+Nachrichtenliste, die ZENJI an das Sprachmodell sendet – deterministisch,
+budget-begrenzt und vollständig nachvollziehbar.
 
 ## 1. Grundaufbau der Nachrichtenliste
 
@@ -14,6 +14,9 @@ danach der chronologische Verlauf, dann die aktuelle Anfrage:
 ```
 [1] system:  ## Identität            ← SettingsService (persona.system_prompt)
              ## Persönlichkeit       ← PersonalityEngine.compile_context()
+             ## Kommunikationsmodus  ← CommunicationManager.mode_directives()
+                                        (nur wenn Modus aktiv; temporär,
+                                        v0.3.0, direkt hinter der Persönlichkeit)
              ## Regeln               ← PolicyEngine.compile().context_text
              ## Erinnerungen         ← MemoryEngine-Auswahl in Datenblöcken
              ## Zusammenfassung älterer Nachrichten   ← nur bei Kürzung
@@ -45,8 +48,8 @@ Heuristik ohne Tokenizer-Abhängigkeit (modellunabhängig!):
 3. **Zusammenfassung** selbst wird stufenweise verkleinert (weniger
    Einträge), falls das Budget weiter schrumpft.
 
-Feste Abschnitte (Identität, Persönlichkeit, Regeln) werden **nie**
-gekürzt – sie definieren ZENJI.
+Feste Abschnitte (Identität, Persönlichkeit, Kommunikationsmodus, Regeln)
+werden **nie** gekürzt – sie definieren ZENJI.
 
 ## 4. Datenblöcke (struktureller Injection-Schutz)
 
@@ -80,6 +83,7 @@ ContextPlan(
   flags,                              # Injection-Muster der Anfrage
   system_text,                        # der exakte Systemprompt
   used_memory_ids,                    # für mark_used() in Schritt 12
+  mode,                               # aktiver Kommunikationsmodus (v0.3.0)
 )
 ```
 
@@ -91,16 +95,17 @@ Center **exakt sehen**, was das Modell bekommt. Keine Blackbox.
 
 | Endpoint | Verhalten |
 |---|---|
-| `GET /api/core/context-preview` | Entwurf ohne LLM-Aufruf; `message` (Pflicht-optional, Default „Was kannst du?"), `conversation_id` (optional, dann mit Verlauf) |
+| `GET /api/core/context-preview` | Entwurf ohne LLM-Aufruf; `message` (Pflicht-optional, Default „Was kannst du?"), `conversation_id` (optional, dann mit Verlauf), `mode` (optional, v0.3.0: erzwingt einen Kommunikationsmodus `casual\|roast\|focus\|empathy\|open_talk` in der Vorschau); die Antwort enthält `mode` |
 
 ## 7. Zusammenspiel mit allen Engines
 
 ```
 SettingsService.effective() ──── system_identity ─┐
 PersonalityEngine.compile_context() ──────────────┤
-PolicyEngine.compile().context_text ──────────────┤   build()
-PolicyEngine.check_incoming().flags ──────────────┤ ───────► (messages[],
-MemoryEngine.collect_relevant() ── MemoryCandidate ┘            ContextPlan)
+CommunicationManager.mode_directives() ───────────┤   build()
+PolicyEngine.compile().context_text ──────────────┤ ───────► (messages[],
+PolicyEngine.check_incoming().flags ──────────────┤            ContextPlan)
+MemoryEngine.collect_relevant() ── MemoryCandidate ┘
 ConversationService.history() ──── ChatMessage[]
 ChatService ────────────────────── current_message
 ```

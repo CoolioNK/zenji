@@ -1,6 +1,16 @@
-/* Eingabebereich: autoskalierendes Textfeld, Senden/Stopp. */
+/* Eingabebereich: autoskalierendes Textfeld, Senden/Stopp + Moduswahl (v0.3.0). */
 
 import { useRef, useState } from "react";
+import type { CommunicationModeKey } from "../types";
+
+const MODE_OPTIONS: { value: CommunicationModeKey | ""; label: string }[] = [
+  { value: "", label: "Modus: Auto" },
+  { value: "casual", label: "Casual" },
+  { value: "roast", label: "Roast" },
+  { value: "focus", label: "Fokus" },
+  { value: "empathy", label: "Empathie" },
+  { value: "open_talk", label: "Open Talk" },
+];
 
 export function Composer({
   disabled,
@@ -10,16 +20,17 @@ export function Composer({
 }: {
   disabled?: boolean;
   streaming: boolean;
-  onSend: (text: string) => void;
+  onSend: (text: string, mode: CommunicationModeKey | null) => void;
   onStop: () => void;
 }) {
   const [value, setValue] = useState("");
+  const [mode, setMode] = useState<CommunicationModeKey | "">("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const submit = () => {
     const text = value.trim();
     if (!text || disabled || streaming) return;
-    onSend(text);
+    onSend(text, mode === "" ? null : mode);
     setValue("");
     textareaRef.current?.focus();
   };
@@ -44,6 +55,18 @@ export function Composer({
             className="max-h-[180px] w-full resize-none bg-transparent px-4 py-3 text-[14px] leading-relaxed text-ink-50 outline-none placeholder:text-ink-400 disabled:opacity-60"
           />
         </div>
+        <select
+          value={mode}
+          onChange={(e) => setMode(e.target.value as CommunicationModeKey | "")}
+          title="Kommunikationsmodus für die nächste Nachricht (leer = automatisch)"
+          className="h-11 shrink-0 rounded-xl border border-ink-600 bg-ink-850 px-2 text-[12px] text-ink-200 outline-none transition-colors hover:border-jade-600 focus:border-jade-600"
+        >
+          {MODE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
         {streaming ? (
           <button
             onClick={onStop}

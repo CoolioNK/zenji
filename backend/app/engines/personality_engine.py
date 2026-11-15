@@ -117,7 +117,13 @@ class PersonalityEngine(ZenjiEngine):
             communication_style=str(fields.get("communication_style", "")),
             formality=float(fields.get("formality", 0.5)),
             humor=float(fields.get("humor", 0.2)),
+            sarcasm=float(fields.get("sarcasm", 0.3)),
+            cheekiness=float(fields.get("cheekiness", 0.4)),
             directness=float(fields.get("directness", 0.6)),
+            friendliness=float(fields.get("friendliness", 0.7)),
+            empathy=float(fields.get("empathy", 0.6)),
+            curiosity=float(fields.get("curiosity", 0.6)),
+            initiative=float(fields.get("initiative", 0.5)),
             creativity=float(fields.get("creativity", 0.5)),
             response_length=fields.get("response_length", "balanced"),
             language=str(fields.get("language", "auto")),
@@ -133,8 +139,9 @@ class PersonalityEngine(ZenjiEngine):
         profile = self.get(session, personality_id)
         allowed = {
             "name", "identity", "base_personality", "communication_style",
-            "formality", "humor", "directness", "creativity", "response_length",
-            "language", "situational_behavior", "is_active",
+            "formality", "humor", "sarcasm", "cheekiness", "directness",
+            "friendliness", "empathy", "curiosity", "initiative", "creativity",
+            "response_length", "language", "situational_behavior", "is_active",
         }
         if "name" in fields:
             new_name = str(fields["name"]).strip()
@@ -203,7 +210,13 @@ class PersonalityEngine(ZenjiEngine):
             lines.append(f"Kommunikationsstil: {profile.communication_style}")
         lines.append(f"Formalität: {_level(profile.formality, _FORMALITY_LEVELS)}")
         lines.append(f"Humor: {_level(profile.humor, _LEVELS)}")
+        lines.append(f"Sarkasmus: {_level(profile.sarcasm, _LEVELS)}")
+        lines.append(f"Frechheit: {_level(profile.cheekiness, _LEVELS)}")
         lines.append(f"Direktheit: {_level(profile.directness, _LEVELS)}")
+        lines.append(f"Freundlichkeit: {_level(profile.friendliness, _LEVELS)}")
+        lines.append(f"Empathie: {_level(profile.empathy, _LEVELS)}")
+        lines.append(f"Neugier: {_level(profile.curiosity, _LEVELS)}")
+        lines.append(f"Eigeninitiative: {_level(profile.initiative, _LEVELS)}")
         lines.append(f"Kreativität: {_level(profile.creativity, _LEVELS)}")
         lines.append(_LENGTH_DIRECTIVES.get(profile.response_length, _LENGTH_DIRECTIVES["balanced"]))
         if profile.language in _LANGUAGE_DIRECTIVES:

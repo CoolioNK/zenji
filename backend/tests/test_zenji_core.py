@@ -7,6 +7,7 @@ import pytest
 from app.core.config import Settings
 from app.database.database import Database
 from app.database.migrations import run_migrations
+from app.engines.communication_engine import CommunicationManager
 from app.engines.context_engine import ContextEngine
 from app.engines.llm_engine import LLMEngine
 from app.engines.memory_engine import MemoryEngine
@@ -35,6 +36,7 @@ class _Harness:
         self.policy = PolicyEngine()
         self.memory = MemoryEngine()
         self.context = ContextEngine()
+        self.communication = CommunicationManager()
         with self.db.session() as session:
             self.memory.init_search(session)
         self.core = ZenjiCore(
@@ -44,6 +46,7 @@ class _Harness:
             policy_engine=self.policy,
             memory_engine=self.memory,
             context_engine=self.context,
+            communication_engine=self.communication,
         )
         self.chat_service = ChatService(
             database=self.db,
@@ -72,7 +75,7 @@ async def test_send_message_mit_core_erzeugt_orchestrierten_kontext(tmp_path):
     # Alle Kernabschnitte sind enthalten:
     assert "## Identität" in system
     assert "## Persönlichkeit" in system
-    assert "Name: Neutral" in system
+    assert "Name: Zenji" in system
     assert "## Regeln" in system
     assert "Verbindliche Systemregeln" in system
 
@@ -138,8 +141,9 @@ async def test_prepare_turn_ohne_konversation(tmp_path):
             session, conversation_id=None, user_message="Testfrage"
         )
     assert prepared.messages[0].role == "system"
-    assert prepared.personality_name == "Neutral"
-    assert prepared.active_policy_count >= 5
+    assert prepared.personality_name == "Zenji"
+    assert prepared.active_policy_count >= 7
+    assert prepared.mode == "casual"
     assert prepared.plan.budget_tokens > 0
 
 
@@ -152,7 +156,8 @@ async def test_context_preview_ohne_konversation(tmp_path):
     assert preview["messages"][0]["role"] == "system"
     assert preview["budget_tokens"] > 0
     keys = {section["key"] for section in preview["sections"]}
-    assert {"identity", "personality", "policies"} <= keys
+    assert {"identity", "personality", "communication", "policies"} <= keys
+    assert preview["mode"] == "casual"
 
 
 def test_status_liefert_kern_zustaende(tmp_path):
@@ -160,10 +165,14 @@ def test_status_liefert_kern_zustaende(tmp_path):
     with harness.db.session() as session:
         settings = harness.settings_service.effective(session)
         status = harness.core.status(session, settings=settings)
-    assert status["personality"] == "Neutral"
-    assert status["active_policies"] >= 5
+    assert status["personality"] == "Zenji"
+    assert status["active_policies"] >= 7
     assert status["model"] == "qwen3:8b"
     assert status["memories"]["total"] == 0
+    # v0.3.0: Kommunikationsmodi im Status:
+    mode_keys = {mode["key"] for mode in status["communication_modes"]}
+    assert mode_keys == {"casual", "roast", "focus", "empathy", "open_talk"}
+    assert status["communication_default_mode"] == "casual"
 
 
 async def test_finalisierung_toleriert_fehler(tmp_path):

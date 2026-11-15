@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app import __version__
 from app.api import deps
 from app.schemas.core import (
+    CommunicationModeOut,
     ContextMessagePreview,
     ContextPreviewOut,
     ContextSectionOut,
@@ -44,6 +45,10 @@ def core_status(
         provider=status["provider"],  # type: ignore[str]
         num_ctx=status["num_ctx"],  # type: ignore[arg-type]
         num_predict=status["num_predict"],  # type: ignore[arg-type]
+        communication_modes=[
+            CommunicationModeOut(**mode) for mode in status["communication_modes"]  # type: ignore[index]
+        ],
+        communication_default_mode=status["communication_default_mode"],  # type: ignore[arg-type]
     )
 
 
@@ -55,13 +60,21 @@ async def context_preview(
         description="Beispielnachricht, für die der Kontext kompiliert wird",
     ),
     conversation_id: str | None = Query(default=None),
+    mode: str | None = Query(
+        default=None,
+        description="Manueller Kommunikationsmodus (casual|roast|focus|empathy|open_talk)",
+    ),
     session: Session = Depends(_db_session),
     core: ZenjiCore = Depends(deps.get_zenji_core),
 ) -> ContextPreviewOut:
     preview = await core.context_preview(
-        session, conversation_id=conversation_id, sample_message=message
+        session,
+        conversation_id=conversation_id,
+        sample_message=message,
+        mode_override=mode,
     )
     return ContextPreviewOut(
+        mode=preview["mode"],  # type: ignore[index]
         sections=[
             ContextSectionOut(
                 key=section["key"],  # type: ignore[index]

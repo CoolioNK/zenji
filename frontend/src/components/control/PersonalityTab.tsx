@@ -24,7 +24,13 @@ interface Draft {
   communication_style: string;
   formality: number;
   humor: number;
+  sarcasm: number;
+  cheekiness: number;
   directness: number;
+  friendliness: number;
+  empathy: number;
+  curiosity: number;
+  initiative: number;
   creativity: number;
   response_length: string;
   language: string;
@@ -41,7 +47,13 @@ function draftFrom(profile: Personality): Draft {
     communication_style: profile.communication_style,
     formality: profile.formality,
     humor: profile.humor,
+    sarcasm: profile.sarcasm ?? 0.3,
+    cheekiness: profile.cheekiness ?? 0.4,
     directness: profile.directness,
+    friendliness: profile.friendliness ?? 0.7,
+    empathy: profile.empathy ?? 0.6,
+    curiosity: profile.curiosity ?? 0.6,
+    initiative: profile.initiative ?? 0.5,
     creativity: profile.creativity,
     response_length: profile.response_length,
     language: profile.language,
@@ -100,7 +112,13 @@ export function PersonalityTab() {
         communication_style: draft.communication_style,
         formality: draft.formality,
         humor: draft.humor,
+        sarcasm: draft.sarcasm,
+        cheekiness: draft.cheekiness,
         directness: draft.directness,
+        friendliness: draft.friendliness,
+        empathy: draft.empathy,
+        curiosity: draft.curiosity,
+        initiative: draft.initiative,
         creativity: draft.creativity,
         response_length: draft.response_length,
         language: draft.language,
@@ -255,7 +273,13 @@ export function PersonalityTab() {
           <Group title="Eigenschaften">
             <SliderField label="Formalität" value={draft.formality} onChange={(v) => setDraft({ ...draft, formality: v })} />
             <SliderField label="Humor" value={draft.humor} onChange={(v) => setDraft({ ...draft, humor: v })} />
+            <SliderField label="Sarkasmus" value={draft.sarcasm} onChange={(v) => setDraft({ ...draft, sarcasm: v })} />
+            <SliderField label="Frechheit" value={draft.cheekiness} onChange={(v) => setDraft({ ...draft, cheekiness: v })} />
             <SliderField label="Direktheit" value={draft.directness} onChange={(v) => setDraft({ ...draft, directness: v })} />
+            <SliderField label="Freundlichkeit" value={draft.friendliness} onChange={(v) => setDraft({ ...draft, friendliness: v })} />
+            <SliderField label="Empathie" value={draft.empathy} onChange={(v) => setDraft({ ...draft, empathy: v })} />
+            <SliderField label="Neugier" value={draft.curiosity} onChange={(v) => setDraft({ ...draft, curiosity: v })} />
+            <SliderField label="Eigeninitiative" value={draft.initiative} onChange={(v) => setDraft({ ...draft, initiative: v })} />
             <SliderField label="Kreativität" value={draft.creativity} onChange={(v) => setDraft({ ...draft, creativity: v })} />
             <SelectField
               label="Antwortlänge"

@@ -33,23 +33,44 @@ def test_fresh_database_erhaelt_tabellen_und_seeds(tmp_path):
 
     with db.session() as session:
         profiles = list(session.scalars(select(PersonalityModel)))
-        assert len(profiles) == 4
+        assert len(profiles) == 5
         names = {p.name for p in profiles}
-        assert names == {"Neutral", "Professional", "Friendly", "Casual"}
+        assert names == {"Zenji", "Neutral", "Professional", "Friendly", "Casual"}
 
         active = [p for p in profiles if p.is_active]
         assert len(active) == 1
-        assert active[0].name == "Neutral"
+        assert active[0].name == "Zenji"
         assert active[0].is_system is True
+        # Spezifikationswerte der Begleiter-Persönlichkeit (0–1):
+        assert active[0].humor == 0.9
+        assert active[0].sarcasm == 0.65
+        assert active[0].cheekiness == 0.75
+        assert active[0].directness == 0.95
+        assert active[0].friendliness == 0.9
+        assert active[0].empathy == 0.85
+        assert active[0].curiosity == 0.9
+        assert active[0].initiative == 0.85
 
         rules = list(session.scalars(select(PolicyModel)))
-        assert len(rules) == 6
+        assert len(rules) == 8
         system_rules = [r for r in rules if r.source == "system"]
-        assert len(system_rules) == 5
-        assert {r.id for r in system_rules} >= {"zenji_identity", "injection_defense"}
+        assert len(system_rules) == 7
+        assert {r.id for r in system_rules} >= {
+            "zenji_identity",
+            "injection_defense",
+            "communication_freedom",
+            "independent_opinions",
+        }
         # Zenji-Identität hat höchste Priorität:
         identity = next(r for r in rules if r.id == "zenji_identity")
         assert identity.priority == 100
+        # Neue Freiheitsregeln:
+        freedom = next(r for r in rules if r.id == "communication_freedom")
+        assert freedom.priority == 96
+        opinions = next(r for r in rules if r.id == "independent_opinions")
+        assert opinions.priority == 88
+        user_rules = [r for r in rules if r.source == "user"]
+        assert {r.id for r in user_rules} == {"direct_communication"}
 
         # Metadaten-Tabelle konsistent:
         meta = session.get(SchemaVersionModel, 1)
@@ -64,8 +85,8 @@ def test_migration_ist_idempotent(tmp_path):
     # Erneut ausführen darf nichts verändern:
     assert run_migrations(db.engine) == LATEST_VERSION
     with db.session() as session:
-        assert len(list(session.scalars(select(PersonalityModel)))) == 4
-        assert len(list(session.scalars(select(PolicyModel)))) == 6
+        assert len(list(session.scalars(select(PersonalityModel)))) == 5
+        assert len(list(session.scalars(select(PolicyModel)))) == 8
 
 
 def test_migration_erhaelt_bestehende_konversationen(tmp_path):
@@ -125,7 +146,7 @@ def test_migration_erhaelt_bestehende_konversationen(tmp_path):
         assert messages[0].content == "Wichtige Phase-1-Nachricht"
 
         # Seeds trotzdem korrekt angelegt:
-        assert len(list(session.scalars(select(PersonalityModel)))) == 4
+        assert len(list(session.scalars(select(PersonalityModel)))) == 5
         assert current_version(db.engine) == LATEST_VERSION
 
 

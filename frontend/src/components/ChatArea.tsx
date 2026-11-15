@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { Composer } from "./Composer";
 import { MessageBubble } from "./MessageBubble";
-import type { ChatError, Health, Message } from "../types";
+import type { ChatError, CommunicationModeKey, Health, Message } from "../types";
 
 export function ChatArea({
   messages,
@@ -17,7 +17,7 @@ export function ChatArea({
   streaming: boolean;
   chatError: ChatError | null;
   health: Health | null;
-  onSend: (text: string) => void;
+  onSend: (text: string, mode: CommunicationModeKey | null) => void;
   onStop: () => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);

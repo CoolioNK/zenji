@@ -32,13 +32,13 @@ def engine(db):
     return PersonalityEngine()
 
 
-def test_seed_profile_geladen_und_neutral_aktiv(db, engine):
+def test_seed_profile_geladen_und_zenji_aktiv(db, engine):
     with db.session() as session:
         profiles = engine.list(session)
-        assert len(profiles) == 4
+        assert len(profiles) == 5
         active = engine.require_active(session)
         assert active is not None
-        assert active.name == "Neutral"
+        assert active.name == "Zenji"
         assert active.is_system is True
 
 
@@ -47,11 +47,17 @@ def test_kompilierung_enthaelt_alle_abschnitte(db, engine):
         active = engine.require_active(session)
         text = engine.compile_context(active)
     assert text.startswith("## Persönlichkeit")
-    assert "Name: Neutral" in text
+    assert "Name: Zenji" in text
     assert "Identität:" in text
     assert "Formalität:" in text
     assert "Humor:" in text
+    assert "Sarkasmus:" in text
+    assert "Frechheit:" in text
     assert "Direktheit:" in text
+    assert "Freundlichkeit:" in text
+    assert "Empathie:" in text
+    assert "Neugier:" in text
+    assert "Eigeninitiative:" in text
     assert "Kreativität:" in text
     assert "Antworte ausführlich genug" in text  # balanced
     assert "Verhalten in besonderen Situationen:" in text
@@ -60,14 +66,16 @@ def test_kompilierung_enthaelt_alle_abschnitte(db, engine):
 
 def test_kompilierung_spiegelt_profil_eigenschaften(db, engine):
     with db.session() as session:
-        professional = engine.get(session, engine.list(session)[1].id)
-        text = engine.compile_context(professional)
-    assert "Name: Professional" in text
-    assert "sehr formell" in text
-    assert "Antworte ausführlich und strukturiert" in text  # detailed
+        profiles = engine.list(session)
+        by_name = {p.name: p for p in profiles}
+        professional_text = engine.compile_context(by_name["Professional"])
+    assert "Name: Professional" in professional_text
+    assert "sehr formell" in professional_text
+    assert "Antworte ausführlich und strukturiert" in professional_text  # detailed
 
-    casual = engine.get(session, engine.list(session)[3].id)
-    casual_text = engine.compile_context(casual)
+    with db.session() as session:
+        casual = next(p for p in engine.list(session) if p.name == "Casual")
+        casual_text = engine.compile_context(casual)
     assert "Name: Casual" in casual_text
     assert "Antworte knapp" in casual_text  # short
 
@@ -109,9 +117,13 @@ def test_profil_update(db, engine):
     with db.session() as session:
         profile = engine.create(session, {"name": "Wandelbar"})
         updated = engine.update(
-            session, profile.id, {"humor": 0.8, "identity": "Neu"}
+            session,
+            profile.id,
+            {"humor": 0.8, "sarcasm": 0.9, "initiative": 0.7, "identity": "Neu"},
         )
         assert updated.humor == 0.8
+        assert updated.sarcasm == 0.9
+        assert updated.initiative == 0.7
         assert updated.identity == "Neu"
         # Ungültiger Name:
         with pytest.raises(ValidationError):
@@ -120,10 +132,10 @@ def test_profil_update(db, engine):
 
 def test_systemprofil_geschuetzt(db, engine):
     with db.session() as session:
-        neutral = engine.get(session, engine.list(session)[0].id)
-        assert neutral.is_system
+        system_profile = engine.get(session, engine.list(session)[0].id)
+        assert system_profile.is_system
         with pytest.raises(PersonalityProtectedError):
-            engine.delete(session, neutral.id)
+            engine.delete(session, system_profile.id)
 
 
 def test_aktives_profil_geschuetzt(db, engine):

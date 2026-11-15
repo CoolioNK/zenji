@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
+from app.engines.communication_engine import CommunicationManager
 from app.engines.context_engine import ContextEngine, ContextPlan, MemoryCandidate
 from app.engines.memory_engine import MemoryEngine
 from app.engines.personality_engine import PersonalityEngine
@@ -50,10 +51,12 @@ class PreparedTurn:
     active_policy_count: int
     used_memory_ids: list[str] = field(default_factory=list)
     flags: list[str] = field(default_factory=list)
+    #: Aktiver Kommunikationsmodus (v0.3.0; leer ohne CommunicationManager).
+    mode: str = ""
 
 
 class ZenjiCore:
-    """Koordiniert Personality, Policy, Memory und Context für einen Chat-Turn."""
+    """Koordiniert Personality, Policy, Memory, Communication und Context."""
 
     name = "core"
 
@@ -66,6 +69,7 @@ class ZenjiCore:
         policy_engine: PolicyEngine,
         memory_engine: MemoryEngine,
         context_engine: ContextEngine,
+        communication_engine: CommunicationManager | None = None,
     ) -> None:
         self._settings_service = settings_service
         self._conversations = conversation_service
@@ -73,6 +77,7 @@ class ZenjiCore:
         self._policy = policy_engine
         self._memory = memory_engine
         self._context = context_engine
+        self._communication = communication_engine
 
     # --- Vorbereitung (Schritte 1–7) ----------------------------------------------------
     async def prepare_turn(
@@ -82,10 +87,13 @@ class ZenjiCore:
         conversation_id: str | None,
         user_message: str,
         exclude_ids: set[str] | None = None,
+        mode_override: str | None = None,
     ) -> PreparedTurn:
         """Baut den vollständigen Kontext für eine Anfrage.
 
         Ohne ``conversation_id`` (z. B. Kontext-Preview) entfällt der Verlauf.
+        ``mode_override`` erzwingt einen Kommunikationsmodus (manuelle Nutzer-
+        anfrage); ohne Override wählt der CommunicationManager automatisch.
         """
         # (2) Einstellungen laden
         settings = self._settings_service.effective(session)
@@ -93,6 +101,20 @@ class ZenjiCore:
         # (3) Persönlichkeit laden
         personality = self._personality.require_active(session)
         personality_text = self._personality.compile_context(personality)
+
+        # (3b) Situativer Kommunikationsmodus (v0.3.0; fail-soft)
+        mode = ""
+        communication_text = ""
+        if self._communication is not None:
+            try:
+                mode = self._communication.detect_mode(
+                    user_message, override=mode_override
+                )
+                communication_text = self._communication.mode_directives(mode)
+            except Exception as exc:  # noqa: BLE001 – Modus darf nie den Chat brechen
+                log.warning(
+                    "Kommunikationsmodus konnte nicht bestimmt werden (fail-soft): %s", exc
+                )
 
         # (4) Aktive Regeln laden und kompilieren
         compilation = self._policy.compile(session)
@@ -147,6 +169,8 @@ class ZenjiCore:
             num_ctx=settings.llm.num_ctx,
             num_predict=settings.llm.num_predict,
             flags=flags,
+            communication_text=communication_text,
+            mode=mode,
         )
 
         return PreparedTurn(
@@ -156,6 +180,7 @@ class ZenjiCore:
             active_policy_count=len(compilation.active_rules),
             used_memory_ids=plan.used_memory_ids,
             flags=flags,
+            mode=mode,
         )
 
     # --- Abschluss (Schritt 12) ------------------------------------------------------------
@@ -209,6 +234,13 @@ class ZenjiCore:
             "provider": settings.llm.provider,
             "num_ctx": settings.llm.num_ctx,
             "num_predict": settings.llm.num_predict,
+            # v0.3.0: verfügbare Kommunikationsmodi für das UI.
+            "communication_modes": (
+                self._communication.available() if self._communication else []
+            ),
+            "communication_default_mode": (
+                self._communication.default_mode if self._communication else ""
+            ),
         }
 
     # --- Context-Preview (für GET /api/core/context-preview) --------------------------------
@@ -218,20 +250,24 @@ class ZenjiCore:
         *,
         conversation_id: str | None,
         sample_message: str,
+        mode_override: str | None = None,
     ) -> dict[str, object]:
         """Nachvollziehbarer Kontext-Entwurf ohne LLM-Aufruf.
 
         Ohne ``conversation_id`` entfällt der Verlauf – der Entwurf zeigt dann
-        Systemabschnitte + Beispielnachricht.
+        Systemabschnitte + Beispielnachricht.  ``mode_override`` erzwingt einen
+        Modus (gleiche Semantik wie im Chat).
         """
         prepared = await self.prepare_turn(
             session,
             conversation_id=conversation_id,
             user_message=sample_message,
             exclude_ids=None,
+            mode_override=mode_override,
         )
         plan = prepared.plan
         return {
+            "mode": prepared.mode,
             "sections": [
                 {
                     "key": section.key,

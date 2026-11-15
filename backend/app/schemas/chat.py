@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.engines.communication_engine import COMMUNICATION_MODE_KEYS
 from app.schemas.conversation import MessageOut
 
 
@@ -14,13 +15,19 @@ class ChatRequest(BaseModel):
     """Anfrage für ``POST /api/chat`` und ``POST /api/chat/stream``.
 
     Ohne ``conversation_id`` wird automatisch eine neue Konversation
-    angelegt (Titel aus dem ersten Nutzerwortlaut).
+    angelegt (Titel aus dem ersten Nutzerwortlaut).  Mit ``mode`` wird ein
+    Kommunikationsmodus erzwungen (manuelle Nutzeranfrage); ohne ``mode``
+    wählt der CommunicationManager den Modus automatisch.
     """
 
     model_config = ConfigDict(protected_namespaces=(), extra="forbid")
 
     conversation_id: str | None = Field(default=None, description="UUID einer bestehenden Konversation")
     message: str = Field(min_length=1, max_length=32000)
+    mode: str | None = Field(
+        default=None,
+        description=f"Manueller Kommunikationsmodus: einer aus {COMMUNICATION_MODE_KEYS}",
+    )
 
     @field_validator("conversation_id")
     @classmethod
@@ -32,6 +39,18 @@ class ChatRequest(BaseModel):
         except ValueError as exc:
             raise ValueError("conversation_id muss eine gültige UUID sein") from exc
         return value
+
+    @field_validator("mode")
+    @classmethod
+    def _validate_mode(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if not normalized:
+            return None
+        if normalized not in COMMUNICATION_MODE_KEYS:
+            raise ValueError(f"mode muss einer aus {COMMUNICATION_MODE_KEYS} sein.")
+        return normalized
 
 
 class ChatResponse(BaseModel):

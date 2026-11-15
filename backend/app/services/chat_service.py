@@ -134,6 +134,7 @@ class ChatService:
                         conversation_id=conversation_id,
                         user_message=request.message,
                         exclude_ids={user_model.id},
+                        mode_override=request.mode,
                     )
                     context = prepared.messages
                 else:
@@ -191,6 +192,7 @@ class ChatService:
                     conversation_id=conversation_id,
                     user_message=request.message,
                     exclude_ids={user_id},
+                    mode_override=request.mode,
                 )
                 context = prepared.messages
                 used_memory_ids = prepared.used_memory_ids

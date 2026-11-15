@@ -28,6 +28,7 @@ from app.core.logging import get_logger, setup_logging
 from app.core.storage import StorageManager
 from app.database.database import Database
 from app.database.migrations import run_migrations
+from app.engines.communication_engine import CommunicationManager
 from app.engines.context_engine import ContextEngine
 from app.engines.llm_engine import LLMEngine
 from app.engines.memory_engine import MemoryEngine
@@ -116,6 +117,8 @@ def create_app(
     policy_engine = PolicyEngine()
     memory_engine = MemoryEngine()
     context_engine = ContextEngine()
+    # v0.3.0: situative Kommunikationsmodi (deterministisch, datengetrieben).
+    communication_engine = CommunicationManager()
     zenji_core = ZenjiCore(
         settings_service=settings_service,
         conversation_service=conversation_service,
@@ -123,16 +126,22 @@ def create_app(
         policy_engine=policy_engine,
         memory_engine=memory_engine,
         context_engine=context_engine,
+        communication_engine=communication_engine,
     )
     extensions.register(personality_engine)
     extensions.register(policy_engine)
     extensions.register(memory_engine)
     extensions.register(context_engine)
+    extensions.register(communication_engine)
 
     app = FastAPI(
         title="ZENJI API",
         version=__version__,
-        description="Modulares KI-System – Phase 2: Core Intelligence (Persönlichkeit, Regeln, Gedächtnis, Kontext).",
+        description=(
+            "Modulares KI-System – Phase 2: Core Intelligence (Persönlichkeit, "
+            "Regeln, Gedächtnis, Kontext); v0.3.0: Begleiter-Persönlichkeit und "
+            "situative Kommunikationsmodi."
+        ),
         lifespan=lifespan,
     )
 
@@ -155,6 +164,7 @@ def create_app(
     app.state.policy_engine = policy_engine
     app.state.memory_engine = memory_engine
     app.state.context_engine = context_engine
+    app.state.communication_engine = communication_engine
     app.state.zenji_core = zenji_core
 
     provider_config = {

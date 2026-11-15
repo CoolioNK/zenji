@@ -3,8 +3,8 @@
 Aufbau (modellunabhängig, deterministisch):
 
 - **Ein** zusammengeführter Systemprompt mit klar beschrifteten Abschnitten:
-  Identität → Persönlichkeit → Regeln → Erinnerungen → Zusammenfassung älterer
-  Nachrichten → Sicherheitshinweise.
+  Identität → Persönlichkeit → Kommunikationsmodus → Regeln → Erinnerungen →
+  Zusammenfassung älterer Nachrichten → Sicherheitshinweise.
 - Danach: Gesprächsverlauf (chronologisch) und die aktuelle Nutzeranfrage.
   Die Rollenfolge bleibt ``["system", "user", ...]``.
 
@@ -86,6 +86,8 @@ class ContextPlan:
     flags: list[str] = field(default_factory=list)
     system_text: str = ""
     used_memory_ids: list[str] = field(default_factory=list)
+    #: Aktiver Kommunikationsmodus (v0.3.0; leer bei fehlender Engine).
+    mode: str = ""
 
     @property
     def usage_ratio(self) -> float:
@@ -129,9 +131,11 @@ class ContextEngine(ZenjiEngine):
         num_ctx: int,
         num_predict: int,
         flags: list[str] | None = None,
+        communication_text: str = "",
+        mode: str = "",
     ) -> tuple[list[ChatMessage], ContextPlan]:
         """Baut die Nachrichtenliste und den Nachvollziehbarkeits-Plan."""
-        plan = ContextPlan(flags=list(flags or []))
+        plan = ContextPlan(flags=list(flags or []), mode=mode)
         budget = self._budget(num_ctx, num_predict)
         plan.budget_tokens = budget
 
@@ -145,8 +149,11 @@ class ContextEngine(ZenjiEngine):
         core_sections: list[tuple[str, str]] = [
             ("identity", identity_text),
             ("personality", personality_text.strip()),
-            ("policies", policies_text.strip()),
         ]
+        # v0.3.0: situativer Kommunikationsmodus direkt hinter der Persönlichkeit.
+        if communication_text.strip():
+            core_sections.append(("communication", communication_text.strip()))
+        core_sections.append(("policies", policies_text.strip()))
         core_lines: list[str] = []
         for key, content in core_sections:
             tokens = estimate_tokens(content)

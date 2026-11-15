@@ -76,7 +76,7 @@ export function ChatPage() {
         streaming={status === "streaming"}
         chatError={error}
         health={health}
-        onSend={(text) => void send(text)}
+        onSend={(text, mode) => void send(text, mode)}
         onStop={stop}
       />
 

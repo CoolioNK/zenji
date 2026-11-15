@@ -28,15 +28,17 @@ ZENJI-SSD/
 |---|---|
 | `conversations`, `messages` | Chats (Phase 1, unverändert) |
 | `settings` | Laufzeit-Einstellungen (Phase 1) |
-| `personalities` | Persönlichkeitsprofile (Seed: 4 Systemprofile) |
-| `policies` | Verhaltensregeln (Seed: 5 System + 1 Nutzerregel) |
+| `personalities` | Persönlichkeitsprofile (Seed: 5 Systemprofile, „Zenji" aktiv; v0.3.0 +6 Achsen) |
+| `policies` | Verhaltensregeln (Seed: 7 System + 1 Nutzerregel) |
 | `memories` | Erinnerungen (Typ, Quelle, Relevanz, Status, content_hash indiziert) |
 | `memories_fts` | FTS5-Volltextindex über Erinnerungen (virtual table) |
 | `schema_version` | Versions-Metadaten (Spiegel von `PRAGMA user_version`) |
 
-Migrationen: `PRAGMA user_version = 2` (aktuelle Stufe). Schema-Änderungen
+Migrationen: `PRAGMA user_version = 3` (aktuelle Stufe). Schema-Änderungen
 sind nur additiv; bestehende Konversationen bleiben bei jedem Start erhalten
-(geprüft in `tests/test_migrations.py`). Details: docs/DEVELOPMENT.md.
+(geprüft in `tests/test_migrations.py`). Migration 2→3 (v0.3.0) ergänzt
+sechs Persönlichkeits-Achsen per `ALTER TABLE` und aktualisiert System-
+regeln/-profile aus den Seeds. Details: docs/DEVELOPMENT.md.
 
 ## Datenschutz im Gedächtnis
 

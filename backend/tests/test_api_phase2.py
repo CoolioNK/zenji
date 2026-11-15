@@ -15,10 +15,14 @@ async def test_personality_liste_mit_seed(client):
     response = await http.get("/api/personality")
     assert response.status_code == 200
     profiles = response.json()
-    assert len(profiles) == 4
-    assert profiles[0]["name"] == "Neutral"
+    assert len(profiles) == 5
+    assert profiles[0]["name"] == "Zenji"
     assert profiles[0]["is_active"] is True
     assert all(p["is_system"] for p in profiles)
+    # Neue Eigenschaftsachsen werden mitgeliefert:
+    assert set(profiles[0]) >= {
+        "sarcasm", "cheekiness", "friendliness", "empathy", "curiosity", "initiative"
+    }
 
 
 async def test_personality_erstellen_aktivieren_bearbeiten(client):
@@ -103,10 +107,10 @@ async def test_policies_liste_mit_seed(client):
     response = await http.get("/api/policies")
     assert response.status_code == 200
     body = response.json()
-    assert len(body["policies"]) == 6
+    assert len(body["policies"]) == 8
     assert body["conflicts"] == []
     assert body["disabled_count"] == 0
-    system_first = [p["source"] == "system" for p in body["policies"][:5]]
+    system_first = [p["source"] == "system" for p in body["policies"][:7]]
     assert all(system_first)
 
 
@@ -230,11 +234,14 @@ async def test_core_status(client):
     response = await http.get("/api/core/status")
     assert response.status_code == 200
     status = response.json()
-    assert status["personality"] == "Neutral"
-    assert status["active_policies"] >= 5
+    assert status["personality"] == "Zenji"
+    assert status["active_policies"] >= 7
     assert status["model"] == "qwen3:8b"
     assert status["memories"]["total"] == 0
     assert status["num_ctx"] == 8192
+    assert status["communication_default_mode"] == "casual"
+    mode_keys = {mode["key"] for mode in status["communication_modes"]}
+    assert mode_keys == {"casual", "roast", "focus", "empathy", "open_talk"}
 
 
 async def test_core_context_preview(client):
@@ -245,7 +252,8 @@ async def test_core_context_preview(client):
     assert response.status_code == 200
     body = response.json()
     keys = {s["key"] for s in body["sections"]}
-    assert {"identity", "personality", "policies"} <= keys
+    assert {"identity", "personality", "communication", "policies"} <= keys
+    assert body["mode"] == "casual"
     assert body["messages"][0]["role"] == "system"
     assert body["budget_tokens"] == 8192 - 2048 - 256
     assert 0 <= body["usage_ratio"] <= 1

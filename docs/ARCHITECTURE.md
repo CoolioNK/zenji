@@ -32,6 +32,7 @@ Kontext diese Antworten entstehen.
 ├────────────────────────────────────────────────────────────┤
 │ Engines (app/engines)                                       │
 │  PersonalityEngine  Profile laden → Persönlichkeitskontext   │
+│  CommunicationManager situativer Modus + Stilvorgabe (v0.3) │
 │  PolicyEngine       Regeln priorisieren, Konflikte, Schutz   │
 │  MemoryEngine       Gedächtnis: CRUD, Suche, Auswahl         │
 │  ContextEngine      Token-Budget, Systemprompt-Compile       │
@@ -63,7 +64,7 @@ Kontext diese Antworten entstehen.
   implementieren `LLMProvider` (in `app/engines/providers/base.py`) und
   registrieren sich in `app/engines/providers/__init__.py`.
 
-## 3. Chat-Datenfluss (Phase 2)
+## 3. Chat-Datenfluss (Phase 2 + v0.3.0)
 
 ```
 Nutzer → POST /api/chat/stream
@@ -73,11 +74,14 @@ Nutzer → POST /api/chat/stream
   3. ZENJI Core orchestriert (prepare_turn):
      a. Settings laden                      (SettingsService)
      b. Persönlichkeit laden + kompilieren  (PersonalityEngine)
-     c. Aktive Regeln kompilieren           (PolicyEngine, mit Konfliktreport)
-     d. Relevante Erinnerungen suchen       (MemoryEngine, FTS5/LIKE)
-     e. Verlauf laden                       (ConversationService, max. 50)
-     f. Kontext bauen + Budget prüfen       (ContextEngine, ein Systemprompt)
-     g. Injection-Prüfung der Anfrage       (PolicyEngine.check_incoming,
+     c. Kommunikationsmodus wählen          (CommunicationManager:
+                                              Override → explizit → Signale
+                                              → Standard; temporär, v0.3.0)
+     d. Aktive Regeln kompilieren           (PolicyEngine, mit Konfliktreport)
+     e. Relevante Erinnerungen suchen       (MemoryEngine, FTS5/LIKE)
+     f. Verlauf laden                       (ConversationService, max. 50)
+     g. Kontext bauen + Budget prüfen       (ContextEngine, ein Systemprompt)
+     h. Injection-Prüfung der Anfrage       (PolicyEngine.check_incoming,
                                              fail-soft, nur Flags)
   4. LLMEngine.stream(...) → OllamaProvider → NDJSON → StreamChunk
   5. SSE-Ereignisse: start → delta* → done (oder error)
@@ -119,13 +123,15 @@ Statusmeldungen, ein Crash wird verhindert. Ein SSD-Trennen während des
 Betriebs wird über Schreibfehler erkannt und in `StorageUnavailableError`
 übersetzt.
 
-## 6. Engines (Phase 2 aktiv, Phase 3+ Erweiterung)
+## 6. Engines (Phase 2 aktiv, v0.3.0 Begleiter, Phase 3+ Erweiterung)
 
-Die Phase-2-Engines sind implementiert und im Chatpfad aktiv:
+Die Phase-2-Engines sind implementiert und im Chatpfad aktiv; v0.3.0 ergänzt
+den CommunicationManager:
 
 | Engine | Modul | Dokumentation |
 |---|---|---|
 | `PersonalityEngine` | `app/engines/personality_engine.py` | **PERSONALITY_ENGINE.md** |
+| `CommunicationManager` | `app/engines/communication_engine.py` | **COMMUNICATION_MODES.md** |
 | `PolicyEngine` | `app/engines/policy_engine.py` | **POLICY_ENGINE.md** |
 | `MemoryEngine` | `app/engines/memory_engine.py` | **MEMORY_ENGINE.md** |
 | `ContextEngine` | `app/engines/context_engine.py` | **CONTEXT_ENGINE.md** |
@@ -170,9 +176,10 @@ Einheitliches Format `{"error": {"code", "message", "detail"}}`.
 
 ## 8. Engine-Dokumentation
 
-Datenflüsse und Zusammenspiel der Engines (Phase 2):
+Datenflüsse und Zusammenspiel der Engines (Phase 2 + v0.3.0):
 
 - **PERSONALITY_ENGINE.md** – Profile, Kompilierung, Aktivierung
+- **COMMUNICATION_MODES.md** – situative Modi, Moduswahl, manuelle Anfrage
 - **POLICY_ENGINE.md** – Prioritäten, Konflikte, System-Schutz, Injection
 - **MEMORY_ENGINE.md** – Typen, Suche, Duplikate, Veralten, Merkwörter
 - **CONTEXT_ENGINE.md** – Token-Budget, Systemprompt-Compile, Nachvollziehbarkeit
