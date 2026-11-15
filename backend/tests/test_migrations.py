@@ -52,13 +52,14 @@ def test_fresh_database_erhaelt_tabellen_und_seeds(tmp_path):
         assert active[0].initiative == 0.85
 
         rules = list(session.scalars(select(PolicyModel)))
-        assert len(rules) == 8
+        assert len(rules) == 9
         system_rules = [r for r in rules if r.source == "system"]
-        assert len(system_rules) == 7
+        assert len(system_rules) == 8
         assert {r.id for r in system_rules} >= {
             "zenji_identity",
             "injection_defense",
             "communication_freedom",
+            "insult_banter",
             "independent_opinions",
         }
         # Zenji-Identität hat höchste Priorität:
@@ -67,6 +68,8 @@ def test_fresh_database_erhaelt_tabellen_und_seeds(tmp_path):
         # Neue Freiheitsregeln:
         freedom = next(r for r in rules if r.id == "communication_freedom")
         assert freedom.priority == 96
+        banter = next(r for r in rules if r.id == "insult_banter")
+        assert banter.priority == 94
         opinions = next(r for r in rules if r.id == "independent_opinions")
         assert opinions.priority == 88
         user_rules = [r for r in rules if r.source == "user"]
@@ -86,7 +89,41 @@ def test_migration_ist_idempotent(tmp_path):
     assert run_migrations(db.engine) == LATEST_VERSION
     with db.session() as session:
         assert len(list(session.scalars(select(PersonalityModel)))) == 5
-        assert len(list(session.scalars(select(PolicyModel)))) == 8
+        assert len(list(session.scalars(select(PolicyModel)))) == 9
+
+
+def test_migration_3_zu_4_aktualisiert_regeln(tmp_path):
+    """v0.3.0-Datenbank (Stufe 3) → Stufe 4: neue Regel ``insult_banter``
+    wird geseedet und der ``communication_freedom``-Text aktualisiert."""
+    db = _db(tmp_path)
+    db.create_schema()
+    run_migrations(db.engine)
+
+    # v0.3.0-Zustand simulieren: Regel fehlt, freedom-Text ist alt, Stufe 3:
+    with db.session() as session:
+        banter = session.get(PolicyModel, "insult_banter")
+        assert banter is not None
+        session.delete(banter)
+        freedom = session.get(PolicyModel, "communication_freedom")
+        assert freedom is not None
+        freedom.instruction = "ALTER TEXT"
+        session.execute(text("UPDATE schema_version SET version = 3"))
+    with db.engine.connect() as conn:
+        conn.execute(text("PRAGMA user_version = 3"))
+        conn.commit()
+    assert current_version(db.engine) == 3
+
+    assert run_migrations(db.engine) == 4
+
+    with db.session() as session:
+        banter = session.get(PolicyModel, "insult_banter")
+        assert banter is not None
+        assert banter.source == "system"
+        assert banter.priority == 94
+        freedom = session.get(PolicyModel, "communication_freedom")
+        assert freedom is not None
+        assert "Hurensohn" in freedom.instruction
+        assert len(list(session.scalars(select(PolicyModel)))) == 9
 
 
 def test_migration_erhaelt_bestehende_konversationen(tmp_path):

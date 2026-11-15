@@ -107,10 +107,10 @@ async def test_policies_liste_mit_seed(client):
     response = await http.get("/api/policies")
     assert response.status_code == 200
     body = response.json()
-    assert len(body["policies"]) == 8
+    assert len(body["policies"]) == 9
     assert body["conflicts"] == []
     assert body["disabled_count"] == 0
-    system_first = [p["source"] == "system" for p in body["policies"][:7]]
+    system_first = [p["source"] == "system" for p in body["policies"][:8]]
     assert all(system_first)
 
 
@@ -235,7 +235,7 @@ async def test_core_status(client):
     assert response.status_code == 200
     status = response.json()
     assert status["personality"] == "Zenji"
-    assert status["active_policies"] >= 7
+    assert status["active_policies"] >= 8
     assert status["model"] == "qwen3:8b"
     assert status["memories"]["total"] == 0
     assert status["num_ctx"] == 8192

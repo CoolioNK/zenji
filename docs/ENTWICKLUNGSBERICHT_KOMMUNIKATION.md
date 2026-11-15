@@ -237,3 +237,48 @@ für alle 5 Modi + explicit + override.
 - Weiches Signal-Gewicht statt Binärentscheidung (Keyword-Scoring)
 - Nutzerdefinierbare Modi (JSON nur für Systemmodi vorgesehen)
 - Automatisierte End-to-End-Prüfung des Modellverhaltens (Evals)
+
+---
+
+## Addendum v0.4.0: Beleidigungs-Banter
+
+**Datum:** 15. November 2026 · Migration Stufe 3 → 4 · 235 Tests grün
+
+Aufbauend auf der Modus-/Regel-Architektur aus diesem Bericht: ZENJI darf
+jetzt **richtig harte Beleidigungen** aussprechen (Hurensohn, Arschloch,
+Wichser …) und schlägt zurück, wenn man es beleidigt.
+
+| Forderung | Umsetzung |
+|---|---|
+| Harte Beleidigungen auf Aufforderung | `communication_freedom` (P96) um Beleidigungs-Satz erweitert + Roast-Direktive nennt die Wörter ausdrücklich |
+| Provokation → Gegenfeuer | Roast-Signale um Beleidigungsmuster erweitert („arschloch", „hurensohn", „fick dich" …): Beleidigt der Nutzer ZENJI, springt Roast automatisch an; Systemregel `insult_banter` (P94) trägt den Rückzuschlag-Auftrag |
+| Grenzen bleiben | `insult_banter`: keine Angriffe auf Herkunft/Religion/Hautfarbe/Geschlecht/Behinderung/sexuelle Orientierung als Gruppe, keine Gewaltandrohungen, keine ernsthaften Beleidigungen echter Dritter, nichts gegenüber Minderjährigen |
+
+**Technik (nur Erweiterung der bestehenden Schichten):**
+
+- `system_policies.json`: freedom-Text erweitert, neue Regel `insult_banter`
+  (P94, Kategorie kommunikation, scope global, source system).
+- `communication_modes.json`: Roast-Signale + Beleidigungswörter,
+  Roast-Direktive mit Gegenfeuer-Absatz, explicit-Muster
+  „beleidigungs-modus"; Casual-`explicit` um Negationen erweitert
+  („beleidige mich nicht", „keine beleidigungen" …).
+- **Negations-Guard:** Explizite Muster aller Modi werden vor allen Signalen
+  geprüft (JSON-Reihenfolge, Casual zuerst) → negierte Beleidigungs-Sätze
+  bleiben Casual.
+- **Prioritäts-Ausnahme:** Empathie outrankt Roast („Mir geht's nicht gut,
+  du Arschloch" → Empathie, Kummer zählt zuerst).
+- Migration **3→4**: `_seed_policies` + `_refresh_system_rule_texts`
+  wiederverwendet — seedet `insult_banter` additiv nach, aktualisiert die
+  Systemregel-Texte; Nutzerdaten/Nutzerregeln unberührt.
+
+**Neue Prüfungen:** Beleidigung→Roast (5 Wörter), Aufforderung→Roast,
+Negation→Casual (Engine **und** Chatpfad), Empathie-vor-Roast,
+Gegenfeuer-/Regeltexte im Systemprompt, Migration 3→4 mit simulierter
+v0.3.0-Datenbank (Regel fehlt + alter freedom-Text → nach Migration
+vollständig).
+
+**Limitation:** Die Heuristik kann einen in der Nachricht genannten Dritten
+nicht vom Adressaten unterscheiden („Mein Kollege ist so ein Arschloch" →
+Roast). `insult_banter` und die Roast-Direktive verbieten Beleidigungen
+echter Dritter aber ausdrücklich — Abfederung auf Prompt-Ebene; die letzte
+Instanz ist wie bei allen Grenzen das Modell selbst (vgl. Grenze 3 oben).

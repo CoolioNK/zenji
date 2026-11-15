@@ -36,17 +36,19 @@ def engine(db):
 def test_systemregeln_geseedet(db, engine):
     with db.session() as session:
         rules = engine.list(session)
-        assert len(rules) == 8
+        assert len(rules) == 9
         # Sortierung: Systemregeln zuerst (source asc → priority desc):
-        assert all(r.source == "system" for r in rules[:7])
+        assert all(r.source == "system" for r in rules[:8])
         # Zenji-Identität hat höchste Priorität:
         identity = next(r for r in rules if r.id == "zenji_identity")
         assert identity.priority == 100
         injection = next(r for r in rules if r.id == "injection_defense")
         assert injection.priority == 100
-        # Neue Freiheitsregeln (v0.3.0):
+        # Neue Freiheitsregeln (v0.3.0/v0.4.0):
         freedom = next(r for r in rules if r.id == "communication_freedom")
         assert freedom.priority == 96
+        banter = next(r for r in rules if r.id == "insult_banter")
+        assert banter.priority == 94
         opinions = next(r for r in rules if r.id == "independent_opinions")
         assert opinions.priority == 88
 
@@ -60,9 +62,10 @@ def test_compile_enhaelt_system_und_nutzerregeln(db, engine):
     assert "Aktive Nutzeregeln" in text
     assert "[P100|identität]" in text
     assert "[P96|kommunikation]" in text
+    assert "[P94|kommunikation]" in text
     assert "[P88|kommunikation]" in text
     assert "[P50|stil|global]" in text
-    assert len(compilation.active_rules) == 8
+    assert len(compilation.active_rules) == 9
     assert compilation.conflicts == []
     assert compilation.disabled_count == 0
 
@@ -84,7 +87,7 @@ def test_deaktivierte_regeln_ausgeschlossen(db, engine):
         text = compilation.context_text
     assert compilation.disabled_count == 1
     assert "Direkte Kommunikation" not in text
-    assert len(compilation.active_rules) == 7
+    assert len(compilation.active_rules) == 8
 
 
 def test_scope_filter(db, engine):

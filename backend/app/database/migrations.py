@@ -13,6 +13,9 @@ Philosophie (siehe docs/DEVELOPMENT.md):
   Eigenschaftsachsen, aktualisiert Systemregeln/-profile, seedet das
   Zenji-Standardprofil und aktiviert es, solange keine echte Nutzerwahl
   vorliegt.
+- Stufe 4 (v0.4.0, Beleidigungs-Banter) ergänzt die neue Systemregel
+  ``insult_banter`` und bringt die Texte der Systemregeln (u. a.
+  ``communication_freedom``) auf den aktuellen Seed-Stand.
 - Seeding ist bewusst **additiv**: existierende Nutzerdaten werden niemals
   überschrieben oder gelöscht; fehlende Standardprofile/-regeln werden nur
   ergänzt.  (Ausnahme in Stufe 3, bewusst eng begrenzt: der **Text** von
@@ -62,7 +65,7 @@ PERSONALITIES_FILE = CONFIG_DIR / "personalities.json"
 POLICIES_FILE = CONFIG_DIR / "system_policies.json"
 
 #: Aktuelle Schema-Stufe. Erhöhen, wenn eine neue Migration hinzukommt.
-LATEST_VERSION = 3
+LATEST_VERSION = 4
 
 # --- Migrationsstufen --------------------------------------------------------
 
@@ -104,9 +107,26 @@ def _migrate_2_to_3(session: Session) -> None:
     _refresh_default_persona(session)
 
 
+def _migrate_3_to_4(session: Session) -> None:
+    """v0.4.0 (Beleidigungs-Banter): Neue Regel ``insult_banter`` + aktualisierte
+    Systemregel-Texte.
+
+    Bewusst eng begrenzt und komplett idempotent:
+
+    - Fehlende System-/Beispielregeln nachseeden (additiv, wie in Stufe 2) –
+      ergänzt u. a. die neue Regel ``insult_banter``.
+    - Die Texte/Werte bestehender **Systemregeln** auf den Seed-Stand bringen
+      (u. a. erweiterter ``communication_freedom``-Text).  Nutzerregeln und
+      sonstige Nutzerdaten bleiben unberührt.
+    """
+    _seed_policies(session)
+    _refresh_system_rule_texts(session)
+
+
 MIGRATIONS: dict[int, Callable[[Session], None]] = {
     2: _migrate_1_to_2,
     3: _migrate_2_to_3,
+    4: _migrate_3_to_4,
 }
 
 

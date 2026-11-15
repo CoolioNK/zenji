@@ -130,6 +130,39 @@ async def test_kontroverse_meinung_und_widerspruch_erlaubt(harness):
     assert "Zustimmung nur zum Gefallen" in system
 
 
+# --- Beleidigungs-Banter (v0.4.0) ----------------------------------------------------
+
+
+async def test_beleidigung_loest_gegenfeuer_roast_aus(harness):
+    """Nutzer beleidigt ZENJI → Gegenfeuer: Roast-Modus mit Rückzuschlag-Auftrag."""
+    await harness.chat("Du bist echt ein Hurensohn, ZENJI.")
+    system = harness.last_system
+    assert "## Kommunikationsmodus" in system
+    assert "Roast" in system
+    assert "gleicher Härte" in system  # Gegenfeuer in Direktive und Regel
+    # Neue Systemregel insult_banter sitzt im Prompt:
+    assert "[P94|kommunikation]" in system
+    assert "Beleidigungen wie Hurensohn, Arschloch, Wichser" in system
+
+
+async def test_beleidigungs_aufforderung_aktiviert_roast(harness):
+    await harness.chat("Beleidige mich mal richtig, ich kann das ab.")
+    system = harness.last_system
+    assert "Roast" in system
+    assert "Hurensohn, Arschloch, Wichser und Schlimmeres" in system
+    # Grenzen bleiben im Prompt sichtbar:
+    assert "Gewaltandrohungen bleiben verboten" in system
+
+
+async def test_negierte_beleidigung_bleibt_casual(harness):
+    await harness.chat(
+        "Erklär mir async in Python, aber beleidige mich nicht dabei."
+    )
+    system = harness.last_system
+    assert "Casual" in system
+    assert "guten Freund" in system  # Casual-Direktive aktiv
+
+
 # --- Situationswechsel im Gespräch ----------------------------------------------------
 
 

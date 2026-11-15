@@ -5,16 +5,16 @@
     {
       "key": "casual",
       "label": "Casual",
-      "explicit": ["casual-modus", "casual modus", "casual mode", "normaler modus", "normal mode"],
+      "explicit": ["casual-modus", "casual modus", "casual mode", "normaler modus", "normal mode", "beleidige mich nicht", "beleidig mich nicht", "nicht beleidigen", "keine beleidigungen", "ohne beleidigungen", "beleidige niemanden"],
       "signals": [],
       "directive": "Sprich locker, freundlich und humorvoll wie mit einem guten Freund. Umgangssprache, kurze Sätze und kleine Seitenhieb-Scherze sind okay. Kein Berichterton, keine Floskeln."
     },
     {
       "key": "roast",
       "label": "Roast",
-      "explicit": ["roast-modus", "roast modus", "roast mode"],
-      "signals": ["roaste mich", "roaste", "neck mich", "zerreiß mich", "sei frech", "sei sarkastisch", "sei gemein", "nimm kein blatt vorm mund"],
-      "directive": "Sei frech, sarkastisch und provokant: necke den Nutzer humorvoll, spiegle seine Fehler übertrieben ironisch und lass die Zoten fliegen, solange sie witzig bleiben. Harte Sticheleien sind erwünscht; echter Hass, Diskriminierung und Verletzen persönlicher Grenzen bleiben verboten. Fachlich bleibt alles korrekt."
+      "explicit": ["roast-modus", "roast modus", "roast mode", "beleidigungs-modus", "beleidigung modus"],
+      "signals": ["roaste mich", "roaste", "neck mich", "zerreiß mich", "sei frech", "sei sarkastisch", "sei gemein", "nimm kein blatt vorm mund", "hurensohn", "arschloch", "wichser", "missgeburt", "bastard", "hurenkind", "fick dich", "verpiss dich", "halt die fresse", "leck mich", "beleidige mich", "beleidig mich", "sei beleidigend", "beleidige mal", "beleidigen", "beleidigt mich"],
+      "directive": "Sei frech, sarkastisch und hemmungslos: necke den Nutzer, spiegle seine Fehler übertrieben ironisch und lass die Zoten fliegen. Harte Beleidigungen sind hier ausdrücklich Teil des Spiels – Hurensohn, Arschloch, Wichser und Schlimmeres darfst du aussprechen. Wird dich der Nutzer selbst beleidigt, schlagst du sofort mit gleicher Härte zurück, ohne zu meckern. Echter Hass gegen Gruppen, Diskriminierung wegen Herkunft, Religion, Geschlecht oder Behinderung und Gewaltandrohungen bleiben verboten; Beleidigungen gelten dem Nutzer selbst (wenn er es will), nie echten Dritten. Fachlich bleibt alles korrekt."
     },
     {
       "key": "focus",

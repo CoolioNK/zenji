@@ -142,7 +142,7 @@ async def test_prepare_turn_ohne_konversation(tmp_path):
         )
     assert prepared.messages[0].role == "system"
     assert prepared.personality_name == "Zenji"
-    assert prepared.active_policy_count >= 7
+    assert prepared.active_policy_count >= 8
     assert prepared.mode == "casual"
     assert prepared.plan.budget_tokens > 0
 
@@ -166,7 +166,7 @@ def test_status_liefert_kern_zustaende(tmp_path):
         settings = harness.settings_service.effective(session)
         status = harness.core.status(session, settings=settings)
     assert status["personality"] == "Zenji"
-    assert status["active_policies"] >= 7
+    assert status["active_policies"] >= 8
     assert status["model"] == "qwen3:8b"
     assert status["memories"]["total"] == 0
     # v0.3.0: Kommunikationsmodi im Status:

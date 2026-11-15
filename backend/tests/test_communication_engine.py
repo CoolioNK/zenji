@@ -96,6 +96,43 @@ def test_signale_prioritaet_thema_vor_aufgabe(manager):
     ) == "open_talk"
 
 
+# --- Beleidigungs-Banter (v0.4.0) -----------------------------------------------------------
+
+
+def test_beleidigungen_gegen_zenji_loesen_roast_aus(manager):
+    assert manager.detect_mode("Du bist so ein Arschloch!") == "roast"
+    assert manager.detect_mode("Du Hurensohn!") == "roast"
+    assert manager.detect_mode("Du Wichser, halt die Fresse.") == "roast"
+    assert manager.detect_mode("Verpiss dich, Missgeburt!") == "roast"
+    assert manager.detect_mode("Fick dich, Bastard.") == "roast"
+
+
+def test_beleidigungs_aufforderung_loest_roast_aus(manager):
+    assert manager.detect_mode("Beleidige mich mal richtig!") == "roast"
+    assert manager.detect_mode("Beleidig mich, ich halte das aus.") == "roast"
+    assert manager.detect_mode("Sei mal richtig beleidigend.") == "roast"
+    assert manager.detect_mode("Wechsle in den Beleidigungs-Modus.") == "roast"
+
+
+def test_negierte_beleidigung_bleibt_casual(manager):
+    assert manager.detect_mode("Beleidige mich nicht, ich bin nur müde.") == "casual"
+    assert manager.detect_mode("Beleidig mich nicht.") == "casual"
+    assert manager.detect_mode("Keine Beleidigungen heute, bitte.") == "casual"
+    assert manager.detect_mode("Sprich ohne Beleidigungen mit mir.") == "casual"
+
+
+def test_empathie_schlaegt_provozierende_beleidigung(manager):
+    """Kummer-Signal gewinnt gegen Beleidigungssignal (Priorität empathy > roast)."""
+    assert manager.detect_mode("Mir geht's nicht gut, du Arschloch.") == "empathy"
+
+
+def test_directive_roast_enhaelt_gegenfeuer_und_harte_worter(manager):
+    directive = manager.mode_directives("roast")
+    assert "gleicher Härte" in directive  # Gegenfeuer-Auftrag
+    assert "Hurensohn" in directive
+    assert "Arschloch" in directive
+
+
 # --- Manueller Override ------------------------------------------------------------------
 
 

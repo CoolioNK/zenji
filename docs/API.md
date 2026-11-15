@@ -275,9 +275,9 @@ Zentrale Zustände für das Control Center:
 
 ```json
 {
-  "version": "0.3.0",
+  "version": "0.4.0",
   "personality": "Zenji", "personality_id": "…",
-  "active_policies": 8, "policy_conflicts": 0,
+  "active_policies": 9, "policy_conflicts": 0,
   "memories": { "total": 3, "active": 2, "superseded": 1, "archived": 0,
                 "by_type": {}, "search_provider": "fts5" },
   "model": "qwen3:8b", "provider": "ollama",
