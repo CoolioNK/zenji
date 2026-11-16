@@ -93,7 +93,7 @@ def test_migration_ist_idempotent(tmp_path):
 
 
 def test_migration_3_zu_4_aktualisiert_regeln(tmp_path):
-    """v0.3.0-Datenbank (Stufe 3) → Stufe 4: neue Regel ``insult_banter``
+    """v0.3.0-Datenbank (Stufe 3) → Migrationen 4+5: neue Regel ``insult_banter``
     wird geseedet und der ``communication_freedom``-Text aktualisiert."""
     db = _db(tmp_path)
     db.create_schema()
@@ -113,7 +113,7 @@ def test_migration_3_zu_4_aktualisiert_regeln(tmp_path):
         conn.commit()
     assert current_version(db.engine) == 3
 
-    assert run_migrations(db.engine) == 4
+    assert run_migrations(db.engine) == LATEST_VERSION
 
     with db.session() as session:
         banter = session.get(PolicyModel, "insult_banter")
@@ -124,6 +124,37 @@ def test_migration_3_zu_4_aktualisiert_regeln(tmp_path):
         assert freedom is not None
         assert "Hurensohn" in freedom.instruction
         assert len(list(session.scalars(select(PolicyModel)))) == 9
+
+
+def test_migration_5_erhaelt_web_tabellen(tmp_path):
+    """v0.5.0: Sieben Recherche-Tabellen existieren; Regelanzahl unverändert."""
+    db = _db(tmp_path)
+    db.create_schema()
+    assert run_migrations(db.engine) == LATEST_VERSION
+
+    with db.engine.connect() as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table'")
+            ).fetchall()
+        }
+    for table in (
+        "research_sessions",
+        "search_queries",
+        "search_results",
+        "sources",
+        "source_snapshots",
+        "citations",
+        "research_cache",
+    ):
+        assert table in tables, f"Tabelle '{table}' fehlt."
+
+    # Idempotent + bestehende Daten unangetastet:
+    assert run_migrations(db.engine) == LATEST_VERSION
+    with db.session() as session:
+        assert len(list(session.scalars(select(PolicyModel)))) == 9
+        assert len(list(session.scalars(select(PersonalityModel)))) == 5
 
 
 def test_migration_erhaelt_bestehende_konversationen(tmp_path):

@@ -71,6 +71,8 @@ class ContextPreviewOut(BaseModel):
     memories_dropped: int
     conflicts: int
     flags: list[str] = Field(default_factory=list)
+    research_planned: bool = False
+    research_tokens: int = 0
     system_text: str
     messages: list[ContextMessagePreview]
     used_memory_ids: list[str] = Field(default_factory=list)

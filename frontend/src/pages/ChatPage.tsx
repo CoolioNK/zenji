@@ -1,4 +1,5 @@
-/* Seitenlayout: Sidebar + Chatbereich + Control Center + Einstellungen-Schublade. */
+/* Seitenlayout: Sidebar + Chatbereich + Control Center + Einstellungen-Schublade.
+   v0.5.0: Recherche-Modus-Auswahl und Live-Panel-Verkabelung. */
 
 import { useCallback, useState } from "react";
 import { ChatArea } from "../components/ChatArea";
@@ -9,11 +10,13 @@ import { useChat } from "../hooks/useChat";
 import { useConversations } from "../hooks/useConversations";
 import { useHealth } from "../hooks/useHealth";
 import { useSettings } from "../hooks/useSettings";
+import type { ResearchMode } from "../types";
 
 export function ChatPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [controlOpen, setControlOpen] = useState(false);
+  const [researchMode, setResearchMode] = useState<ResearchMode>("auto");
 
   const health = useHealth();
   const { conversations, error: conversationsError, refresh, rename, remove } = useConversations();
@@ -27,7 +30,10 @@ export function ChatPage() {
     [refresh],
   );
 
-  const { messages, status, error, send, stop } = useChat(activeId, handleConversationCreated);
+  const { messages, status, error, send, stop, researchEvents, researchSummary } = useChat(
+    activeId,
+    handleConversationCreated,
+  );
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -76,8 +82,12 @@ export function ChatPage() {
         streaming={status === "streaming"}
         chatError={error}
         health={health}
-        onSend={(text, mode) => void send(text, mode)}
+        onSend={(text, mode, research) => void send(text, mode, research ?? researchMode)}
         onStop={stop}
+        researchMode={researchMode}
+        onResearchModeChange={setResearchMode}
+        researchEvents={researchEvents}
+        researchSummary={researchSummary}
       />
 
       <SettingsPanel

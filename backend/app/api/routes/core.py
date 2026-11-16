@@ -95,6 +95,8 @@ async def context_preview(
         memories_dropped=preview["memories_dropped"],  # type: ignore[index]
         conflicts=preview["conflicts"],  # type: ignore[index]
         flags=preview["flags"],  # type: ignore[index]
+        research_planned=preview["research_planned"],  # type: ignore[index]
+        research_tokens=preview["research_tokens"],  # type: ignore[index]
         system_text=preview["system_text"],  # type: ignore[index]
         messages=[
             ContextMessagePreview(

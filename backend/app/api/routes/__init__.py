@@ -11,7 +11,10 @@ from app.api.routes import (
     models,
     personality,
     policies,
+    research,
     settings,
+    sources,
+    web,
 )
 
 api_router = APIRouter(prefix="/api")
@@ -24,3 +27,6 @@ api_router.include_router(personality.router)
 api_router.include_router(policies.router)
 api_router.include_router(memory.router)
 api_router.include_router(core.router)
+api_router.include_router(web.router)
+api_router.include_router(research.router)
+api_router.include_router(sources.router)

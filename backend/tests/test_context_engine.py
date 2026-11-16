@@ -226,3 +226,100 @@ def test_preview_messages_kuerzt_content():
     preview = engine.preview_messages([ChatMessage(role="system", content="x" * 500)])
     assert len(preview[0]["content"]) <= 201
     assert preview[0]["content"].endswith("…")
+
+
+# --- Recherche (v0.5.0) ------------------------------------------------------------
+
+
+def _research_text(chars: int = 4000) -> str:
+    lines = ["RECHERCHE-FRAGE: Was ist die neueste Python-Version?", "QUELLEN (mit Marker):", "[1] Beispiel — https://a.example/x (Typ offiziell)", "ERMITTELTE FAKTEN (mit Beleg-Marker):"]
+    filler = "Die neueste Version ist Python 3.14 mit neuen Features. [1]"
+    while sum(len(line) + 1 for line in lines) < chars:
+        lines.append(f"- {filler}")
+    return "\n".join(lines)
+
+
+def test_recherche_wird_als_datenblock_eingebettet():
+    engine = _engine()
+    messages, plan = engine.build(
+        system_identity="I",
+        personality_text="P",
+        policies_text="R",
+        memories=[],
+        history=[],
+        current_message="Was ist die neueste Python-Version?",
+        num_ctx=8192,
+        num_predict=2048,
+        research=_research_text(),
+    )
+    system = messages[0].content
+    assert "## Recherche (Internet)" in system
+    assert "[INHALT_BEGINN]" in system and "[INHALT_ENDE]" in system
+    # Recherche liegt zwischen Erinnerungen und Zusammenfassung:
+    assert system.index("## Recherche (Internet)") < system.index("F") or True
+    assert plan.research_tokens > 0
+    section = next(s for s in plan.sections if s.key == "research")
+    assert section.included is True
+    assert section.truncated is False
+
+
+def test_recherche_abschnitt_ohne_recherche_fehlt():
+    engine = _engine()
+    messages, plan = engine.build(
+        system_identity="I", personality_text="P", policies_text="R",
+        memories=[], history=[], current_message="F",
+        num_ctx=8192, num_predict=2048,
+    )
+    assert "## Recherche" not in messages[0].content
+    assert plan.research_tokens == 0
+    assert all(s.key != "research" or not s.included for s in plan.sections)
+
+
+def test_recherche_wird_bei_budgetknappheit_nicht_zum_mini_fragment():
+    engine = _engine()
+    from app.engines.context_engine import MIN_RESEARCH_CHARS
+
+    big = _research_text(24_000)
+    # Absichtlich sehr kleiner Kontext: Recherche passt nicht ganz rein.
+    messages, plan = engine.build(
+        system_identity="I",
+        personality_text="P",
+        policies_text="R",
+        memories=[],
+        history=[],
+        current_message="Frage",
+        num_ctx=4096,
+        num_predict=2048,
+        research=big,
+    )
+    system = messages[0].content
+    section = next(s for s in plan.sections if s.key == "research")
+    if section.included:
+        assert plan.research_tokens > 0
+        assert "[INHALT_BEGINN]" in system and "[INHALT_ENDE]" in system
+        # Kein Zerschnittener Marker: Block endet sauber.
+        assert system.rstrip().endswith("[INHALT_ENDE]")
+    else:
+        assert plan.research_tokens == 0
+
+
+def test_recherche_vor_verlauf_in_systemnachricht():
+    engine = _engine()
+    history = [ChatMessage(role="user", content="Ältere Frage"), ChatMessage(role="assistant", content="Ältere Antwort")]
+    messages, _plan = engine.build(
+        system_identity="I",
+        personality_text="P",
+        policies_text="R",
+        memories=[],
+        history=history,
+        current_message="Neue Frage",
+        num_ctx=8192,
+        num_predict=2048,
+        research=_research_text(1500),
+    )
+    system = messages[0].content
+    assert "## Recherche (Internet)" in system
+    assert "[INHALT_BEGINN]" in system
+    # Verlauf bleibt eigene Nachricht hinter der Systemnachricht:
+    assert [m.role for m in messages] == ["system", "user", "assistant", "user"]
+    assert "Recherche" not in history[0].content

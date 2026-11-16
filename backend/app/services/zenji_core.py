@@ -23,6 +23,7 @@ Grundsätze:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
@@ -35,6 +36,9 @@ from app.engines.policy_engine import PolicyCompilation, PolicyEngine
 from app.engines.providers.base import ChatMessage
 from app.services.conversation_service import ConversationService
 from app.services.settings_service import SettingsService
+
+if TYPE_CHECKING:  # pragma: no cover
+    from app.services.web_intelligence_service import WebIntelligenceService
 
 log = get_logger("zenji_core")
 
@@ -53,6 +57,9 @@ class PreparedTurn:
     flags: list[str] = field(default_factory=list)
     #: Aktiver Kommunikationsmodus (v0.3.0; leer ohne CommunicationManager).
     mode: str = ""
+    #: Recherche-Report (v0.5.0; None ohne Recherche) + Kontext-Datenblock.
+    research_report: dict[str, Any] | None = None
+    research_block: str = ""
 
 
 class ZenjiCore:
@@ -70,6 +77,7 @@ class ZenjiCore:
         memory_engine: MemoryEngine,
         context_engine: ContextEngine,
         communication_engine: CommunicationManager | None = None,
+        web_engine: "WebIntelligenceService | None" = None,
     ) -> None:
         self._settings_service = settings_service
         self._conversations = conversation_service
@@ -78,6 +86,7 @@ class ZenjiCore:
         self._memory = memory_engine
         self._context = context_engine
         self._communication = communication_engine
+        self._web = web_engine
 
     # --- Vorbereitung (Schritte 1–7) ----------------------------------------------------
     async def prepare_turn(
@@ -88,12 +97,21 @@ class ZenjiCore:
         user_message: str,
         exclude_ids: set[str] | None = None,
         mode_override: str | None = None,
+        research_override: str | None = None,
+        research_progress: Any = None,
+        research_abort_event: Any = None,
     ) -> PreparedTurn:
         """Baut den vollständigen Kontext für eine Anfrage.
 
         Ohne ``conversation_id`` (z. B. Kontext-Preview) entfällt der Verlauf.
         ``mode_override`` erzwingt einen Kommunikationsmodus (manuelle Nutzer-
         anfrage); ohne Override wählt der CommunicationManager automatisch.
+
+        ``research_override`` (v0.5.0): ``None``/``"auto"`` → Bedarfserkennung;
+        ``"off"`` → nie recherchieren; ``quick|standard|deep`` → erzwungener
+        Recherche-Modus.  Fehlt die Web-Engine oder schlägt die Recherche fehl,
+        läuft der Chat ohne Recherche weiter (fail-soft, ehrliche Meldung im
+        Progress-Stream).
         """
         # (2) Einstellungen laden
         settings = self._settings_service.effective(session)
@@ -158,6 +176,17 @@ class ZenjiCore:
         except Exception as exc:  # noqa: BLE001 – Prüfung darf den Chat nie blockieren
             log.warning("Policy-Prüfung fehlgeschlagen (fail-soft): %s", exc)
 
+        # (5b) Web-Recherche (v0.5.0; fail-soft, zwischen Memory und Verlauf)
+        research_report: dict[str, Any] | None = None
+        research_block = ""
+        if self._web is not None:
+            research_report, research_block = await self._run_research(
+                user_message,
+                research_override=research_override,
+                progress=research_progress,
+                abort_event=research_abort_event,
+            )
+
         # (6)+(7) Kontext aufbauen und über Budget-Plan validieren
         messages, plan = self._context.build(
             system_identity=settings.persona.system_prompt,
@@ -171,6 +200,7 @@ class ZenjiCore:
             flags=flags,
             communication_text=communication_text,
             mode=mode,
+            research=research_block,
         )
 
         return PreparedTurn(
@@ -181,7 +211,67 @@ class ZenjiCore:
             used_memory_ids=plan.used_memory_ids,
             flags=flags,
             mode=mode,
+            research_report=research_report,
+            research_block=research_block,
         )
+
+    # --- Recherche (v0.5.0) ---------------------------------------------------------------
+    async def _run_research(
+        self,
+        user_message: str,
+        *,
+        research_override: str | None,
+        progress: Any,
+        abort_event: Any,
+    ) -> tuple[dict[str, Any] | None, str]:
+        """Entscheidet und führt eine Recherche durch (fail-soft).
+
+        Rückgabe: (Report oder None, Kontext-Datenblock).  Die Entscheidung:
+        ``off`` → nie; ``quick|standard|deep`` → erzwungen; ``auto`` → nur bei
+        Bedarf (Bedarfserkennung des Planners).  Der Recherche-Report geht
+        **nicht** automatisch ins Memory – er ist Sitzungsdaten.
+        """
+        assert self._web is not None
+        from app.web_intelligence.research_planner import normalize_mode
+
+        normalized = normalize_mode(research_override)
+        if normalized == "off":
+            return None, ""
+        forced = bool(normalized)
+        if not forced and not self._web.needs_research(user_message):
+            return None, ""
+
+        emit = progress or (lambda event: None)
+        try:
+            emit({"step": "planning", "detail": "Recherchebedarf geprüft – Recherche startet."})
+            report = await self._web.research(
+                user_message,
+                mode=normalized or None,
+                progress=emit,
+                abort_event=abort_event,
+            )
+        except Exception as exc:  # noqa: BLE001 – Recherche darf den Chat nie brechen
+            log.warning("Recherche fehlgeschlagen (fail-soft): %s", exc)
+            emit(
+                {
+                    "step": "research_failed",
+                    "detail": "Recherche nicht möglich – Antwort erfolgt ohne Webbelege.",
+                }
+            )
+            return None, ""
+        status = report.get("status")
+        if status == "failed":
+            detail = report.get("stats", {}).get("error") or "keine Quelle erreichbar"
+            log.info("Recherche ohne Ergebnis: %s", detail)
+            emit(
+                {
+                    "step": "research_failed",
+                    "detail": f"Recherche ohne Ergebnis ({detail}) – Antwort ohne Webbelege.",
+                }
+            )
+            # Auch ein "failed"-Report bleibt dokumentiert, bringt aber keinen Block.
+            return report, ""
+        return report, self._web.context_block(report)
 
     # --- Abschluss (Schritt 12) ------------------------------------------------------------
     def finalize_turn(
@@ -256,14 +346,23 @@ class ZenjiCore:
 
         Ohne ``conversation_id`` entfällt der Verlauf – der Entwurf zeigt dann
         Systemabschnitte + Beispielnachricht.  ``mode_override`` erzwingt einen
-        Modus (gleiche Semantik wie im Chat).
+        Modus (gleiche Semantik wie im Chat).  Recherche läuft im Preview
+        **nie live** (kein Netzwerkzugriff durch eine Vorschau); angezeigt wird
+        nur, ob der Planner Bedarf erkennen würde.
         """
+        research_would_run = False
+        if self._web is not None:
+            try:
+                research_would_run = self._web.needs_research(sample_message)
+            except Exception:  # noqa: BLE001 – Anzeige, kein Verhalten
+                research_would_run = False
         prepared = await self.prepare_turn(
             session,
             conversation_id=conversation_id,
             user_message=sample_message,
             exclude_ids=None,
             mode_override=mode_override,
+            research_override="off",
         )
         plan = prepared.plan
         return {
@@ -288,6 +387,8 @@ class ZenjiCore:
             "memories_dropped": plan.memories_dropped,
             "conflicts": plan.conflicts,
             "flags": plan.flags,
+            "research_planned": research_would_run,
+            "research_tokens": plan.research_tokens,
             "system_text": plan.system_text,
             "messages": ContextEngine.preview_messages(prepared.messages),
             "used_memory_ids": prepared.used_memory_ids,

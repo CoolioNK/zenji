@@ -21,7 +21,7 @@ import httpx
 import pytest
 
 from app.core.config import Settings
-from app.core.exceptions import ModelNotFoundError, ProviderConnectionError
+from app.core.exceptions import ModelNotFoundError, ProviderConnectionError, SearchProviderError
 from app.engines.providers.base import (
     ChatMessage,
     LLMOptions,
@@ -239,9 +239,32 @@ def parse_sse(raw: bytes) -> list[tuple[str, dict[str, Any]]]:
     return events
 
 
+class FakeSearchProvider:
+    """Ersatz-Suchanbieter (offline deterministisch, Aufrufe aufgezeichnet)."""
+
+    name = "searxng"
+
+    def __init__(self, results: list[dict[str, Any]] | None = None, *, error: str | None = None):
+        self.results = list(results or [])
+        self.error = error
+        self.calls: list[str] = []
+
+    async def search(self, query: str, *, limit: int) -> list[dict[str, Any]]:
+        self.calls.append(query)
+        if self.error:
+            raise SearchProviderError(self.error)
+        return [dict(entry) for entry in self.results[:limit]]
+
+    async def status(self) -> dict[str, Any]:
+        if self.error:
+            return {"available": False, "detail": self.error}
+        return {"available": True, "detail": "Fake-Provider verbunden."}
+
+
 __all__ = [
     "FAKE_REPLY",
     "FakeProvider",
+    "FakeSearchProvider",
     "build_settings",
     "make_provider_factory",
     "open_app",

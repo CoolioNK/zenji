@@ -1,4 +1,4 @@
-# ZENJI – Entwicklung (Phase 1 + 2)
+# ZENJI – Entwicklung (Phase 1 + 2 + 3)
 
 ## Voraussetzungen
 
@@ -39,7 +39,7 @@ ZENJI_SSD_ROOT=$(mktemp -d) ../.venv/bin/uvicorn app.main:app --port 8000
 ## Phase 2: Migrationen und Seeds
 
 Die Datenbank versioniert sich selbst (`PRAGMA user_version` + Tabelle
-`schema_version`, aktuelle Stufe **4**):
+`schema_version`, aktuelle Stufe **5**):
 
 - `app/database/migrations.py`: `run_migrations(engine)` läuft beim
   App-Start (Lifespan), ist **idempotent** und nur additiv — bestehende
@@ -70,6 +70,11 @@ Die Datenbank versioniert sich selbst (`PRAGMA user_version` + Tabelle
   `test_companion_personality.py` simuliert eine Phase-2-Datenbank
   (`user_version=2`) und prüft die 2→3-Überführung inklusive
   Nutzerwahl-Schutz.
+- Migration **4→5 (v0.5.0)**: legt die sieben Web-Intelligence-Tabellen
+  an (`research_sessions`, `search_queries`, `search_results`,
+  `sources`, `source_snapshots`, `citations`, `research_cache`) und
+  hebt die Version – reiner Additiv-Schritt, Seeds (9 Regeln/8 System,
+  5 Profile) bleiben unverändert.
 
 Neue Tabellen/Spalten: `create_schema()` (`create_all`) legt fehlendes
 an, eine neue Migrationsstufe füllt/transformiert, `LATEST_VERSION` +
@@ -86,9 +91,15 @@ Test erhöhen.
 | `test_chat_modes.py` | Repräsentative Gespräche: Modi im echten Chatpfad, Beleidigungs-Banter (v0.4.0) |
 | `test_policy_engine.py` | Sortierung, Konflikte, System-Schutz, Injection-Flags |
 | `test_memory_engine.py` | Dedupe, Veralten/Konflikt, Suche, Merkwörter |
-| `test_context_engine.py` | Budget, Abschnitte, Verlaufskürzung, Datenblöcke |
+| `test_context_engine.py` | Budget, Abschnitte, Verlaufskürzung, Datenblöcke, Recherche-Budget-Floor |
 | `test_zenji_core.py` | Orchestrierung, Fallback ohne Core, Nachbereitung |
 | `test_api_phase2.py` | Alle Endpunkte + Chat-Integration |
+| `test_web_security.py` | SSRF, robots, Geheimnisse (v0.5.0) |
+| `test_search_engine.py` | SearXNG/Brave, Normalisierung, Dedupe (v0.5.0) |
+| `test_research_planner.py` | Bedarfserkennung, Pläne, Limits (v0.5.0) |
+| `test_research_engine.py` | Orchestrator, Events, Report, Cache (v0.5.0) |
+| `test_web_database.py` | Web-Repository, Migration 4→5, Dedupe, Limits (v0.5.0) |
+| `test_api_web.py` | /api/web · /api/research (inkl. SSE) · /api/sources · Chat-Recherche (v0.5.0) |
 
 Der LLM ist gemockt (`FakeProvider`); Tests laufen ohne Netz, Modell
 und geladene Gewichte (~1.4 s gesamt).

@@ -1,19 +1,21 @@
-/* ZENJI Control Center – rechte Schublade mit vier Bereichen.
-   Bereiche: Personality · Policies · Memory · Core Status. */
+/* ZENJI Control Center – rechte Schublade mit fünf Bereichen.
+   Bereiche: Personality · Policies · Memory · Core Status · Web (v0.5.0). */
 
 import { useState } from "react";
 import { PersonalityTab } from "./PersonalityTab";
 import { PoliciesTab } from "./PoliciesTab";
 import { MemoryTab } from "./MemoryTab";
 import { CoreTab } from "./CoreTab";
+import { WebIntelligenceTab } from "./WebIntelligenceTab";
 
-export type ControlTab = "personality" | "policies" | "memory" | "core";
+export type ControlTab = "personality" | "policies" | "memory" | "core" | "web";
 
 const TABS: { key: ControlTab; label: string }[] = [
   { key: "personality", label: "Personality" },
   { key: "policies", label: "Policies" },
   { key: "memory", label: "Memory" },
   { key: "core", label: "Core Status" },
+  { key: "web", label: "Web" },
 ];
 
 export function ControlCenter({
@@ -76,6 +78,7 @@ export function ControlCenter({
         {tab === "policies" && <PoliciesTab />}
         {tab === "memory" && <MemoryTab />}
         {tab === "core" && <CoreTab activeConversationId={activeConversationId} />}
+        {tab === "web" && <WebIntelligenceTab />}
       </div>
     </div>
   );

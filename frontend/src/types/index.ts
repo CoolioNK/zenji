@@ -222,3 +222,132 @@ export interface CommunicationModeInfo {
   key: CommunicationModeKey;
   label: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* v0.5.0: Web Intelligence (Recherche)                                */
+/* ------------------------------------------------------------------ */
+
+export type ResearchMode = "auto" | "off" | "quick" | "standard" | "deep";
+
+export interface WebSearchHit {
+  title: string;
+  url: string;
+  domain: string;
+  snippet: string;
+  provider: string;
+  rank: number;
+  published_at: string | null;
+}
+
+export interface WebSearchResponse {
+  query: string;
+  provider: string;
+  results: WebSearchHit[];
+}
+
+export interface WebSettings {
+  provider: string;
+  searxng_url: string;
+  brave_api_key_set: boolean;
+  language: string;
+  cache_ttl_s: number;
+}
+
+export interface WebStatus {
+  provider: string;
+  search: { available: boolean; detail?: string };
+  browser: {
+    httpx: { available: boolean; detail?: string };
+    playwright: { available: boolean; detail?: string };
+    robots_respected: boolean;
+    per_host_delay_s: number;
+    stats?: Record<string, unknown>;
+  };
+  cache: { total: number; ttl_s?: number };
+  storage: Record<string, number | undefined> & { available?: boolean; detail?: string };
+  planner_modes: string[];
+  version: string;
+}
+
+export interface ResearchSession {
+  session_id: string | null;
+  question: string;
+  mode: string;
+  status: string;
+  source_count: number;
+  duration_ms: number | null;
+  created_at: string | null;
+}
+
+export interface ResearchSourceInfo {
+  marker: number;
+  id: string;
+  title: string;
+  url: string;
+  domain?: string;
+  published_at?: string | null;
+  source_type: string;
+  status: string;
+  type_reason?: string;
+  freshness?: string;
+  age_days?: number | null;
+  transparency?: string;
+  relevance?: number;
+  notes?: string[];
+}
+
+export interface ResearchFact {
+  text: string;
+  marker: number;
+  source_id?: string;
+  source_type?: string;
+}
+
+export interface ResearchReport {
+  session_id?: string | null;
+  question: string;
+  mode: string;
+  status: string;
+  topic?: string;
+  queries: string[];
+  facts: ResearchFact[];
+  contradictions: { topic: string; statements: { marker: number; source_id: string; text: string; numbers: number[] }[] }[];
+  gaps: string[];
+  sources: ResearchSourceInfo[];
+  stats?: Record<string, unknown>;
+  notes?: string[];
+}
+
+export interface Source {
+  id: string;
+  original_url: string;
+  canonical_url: string;
+  domain: string;
+  title: string;
+  author: string | null;
+  published_at: string | null;
+  fetched_at: string | null;
+  content_hash: string;
+  http_status: number;
+  status: string;
+  source_type: string;
+  content_chars: number;
+  created_at: string | null;
+}
+
+export interface SourceListResponse {
+  total: number;
+  sources: Source[];
+}
+
+/** Kompakte Recherche-Zusammenfassung im Chat-„done"-Event. */
+export interface ChatResearchSummary {
+  session_id: string | null;
+  status: string;
+  mode: string;
+  queries: string[];
+  sources: { marker: number | null; title: string; url: string; source_type: string; status: string }[];
+  contradiction_count: number;
+  citations_corrected: number;
+  warnings: string[];
+}

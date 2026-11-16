@@ -39,6 +39,7 @@ from app.engines.providers.base import LLMProvider
 from app.services.chat_service import ChatService
 from app.services.conversation_service import ConversationService
 from app.services.settings_service import SettingsService
+from app.services.web_intelligence_service import WebIntelligenceService
 from app.services.zenji_core import ZenjiCore
 
 log = get_logger("main")
@@ -119,6 +120,9 @@ def create_app(
     context_engine = ContextEngine()
     # v0.3.0: situative Kommunikationsmodi (deterministisch, datengetrieben).
     communication_engine = CommunicationManager()
+    # v0.5.0: Web Intelligence (Recherche) – fail-soft, ohne Engine läuft der
+    # Chat unverändert weiter.
+    web_intelligence = WebIntelligenceService(database)
     zenji_core = ZenjiCore(
         settings_service=settings_service,
         conversation_service=conversation_service,
@@ -127,6 +131,7 @@ def create_app(
         memory_engine=memory_engine,
         context_engine=context_engine,
         communication_engine=communication_engine,
+        web_engine=web_intelligence,
     )
     extensions.register(personality_engine)
     extensions.register(policy_engine)
@@ -140,7 +145,8 @@ def create_app(
         description=(
             "Modulares KI-System – Phase 2: Core Intelligence (Persönlichkeit, "
             "Regeln, Gedächtnis, Kontext); v0.3.0: Begleiter-Persönlichkeit und "
-            "situative Kommunikationsmodi."
+            "situative Kommunikationsmodi; v0.5.0: Web Intelligence (eigene "
+            "Internet-Recherche mit nachvollziehbaren Quellen und Belegen)."
         ),
         lifespan=lifespan,
     )
@@ -166,6 +172,7 @@ def create_app(
     app.state.context_engine = context_engine
     app.state.communication_engine = communication_engine
     app.state.zenji_core = zenji_core
+    app.state.web_intelligence = web_intelligence
 
     provider_config = {
         "base_url": settings.ollama_base_url,

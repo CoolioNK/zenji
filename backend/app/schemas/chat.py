@@ -28,6 +28,13 @@ class ChatRequest(BaseModel):
         default=None,
         description=f"Manueller Kommunikationsmodus: einer aus {COMMUNICATION_MODE_KEYS}",
     )
+    research: str = Field(
+        default="auto",
+        description=(
+            "Web-Recherche-Steuerung: auto (Bedarfserkennung) | off (aus) | "
+            "quick | standard | deep (erzwungener Modus)"
+        ),
+    )
 
     @field_validator("conversation_id")
     @classmethod
@@ -51,6 +58,15 @@ class ChatRequest(BaseModel):
         if normalized not in COMMUNICATION_MODE_KEYS:
             raise ValueError(f"mode muss einer aus {COMMUNICATION_MODE_KEYS} sein.")
         return normalized
+
+    @field_validator("research")
+    @classmethod
+    def _validate_research(cls, value: str | None) -> str:
+        from app.web_intelligence.research_planner import normalize_mode
+
+        # None/leer → auto; sonst normalisieren (off/quick/standard/deep).
+        normalized = normalize_mode(value if value is not None else "auto")
+        return normalized or "auto"
 
 
 class ChatResponse(BaseModel):

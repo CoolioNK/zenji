@@ -17,6 +17,13 @@ import type {
   Settings,
   ContextPreview,
   CoreStatus,
+  ResearchReport,
+  ResearchSession,
+  Source,
+  SourceListResponse,
+  WebSearchResponse,
+  WebSettings,
+  WebStatus,
 } from "../types";
 
 /* Fachlicher Fehler mit Code aus der API ({"error": {code, message}}). */
@@ -67,9 +74,11 @@ export async function postJson<T>(path: string, body: unknown): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function deleteRequest(path: string): Promise<void> {
-  const response = await fetch(path, { method: "DELETE" });
+export async function deleteRequest<T = void>(path: string): Promise<T> {
+  const response = await fetch(path, { method: "DELETE", headers: { Accept: "application/json" } });
   if (!response.ok && response.status !== 204) throw await parseError(response);
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
 }
 
 /* --- Fachliche Aufrufe ------------------------------------------------- */
@@ -135,6 +144,37 @@ export const api = {
     if (conversationId) params.set("conversation_id", conversationId);
     return getJson<ContextPreview>(`/api/core/context-preview?${params.toString()}`);
   },
+
+  /* v0.5.0: Web Intelligence -------------------------------------------- */
+  webSearch: (query: string, provider?: string, limit = 10) =>
+    postJson<WebSearchResponse>("/api/web/search", {
+      query,
+      provider: provider || undefined,
+      limit,
+    }),
+  webSettings: () => getJson<WebSettings>("/api/web/settings"),
+  patchWebSettings: (patch: Record<string, unknown>) =>
+    patchJson<WebSettings>("/api/web/settings", patch),
+  webStatus: () => getJson<WebStatus>("/api/web/status"),
+  clearWebCache: () => deleteRequest<{ deleted: number }>("/api/web/cache"),
+  research: (question: string, mode = "standard") =>
+    postJson<ResearchReport>("/api/research", { question, mode }),
+  researchSessions: (limit = 50) =>
+    getJson<ResearchSession[]>(`/api/research?limit=${limit}`),
+  researchDetail: (id: string) =>
+    getJson<ResearchSession & { plan: Record<string, unknown>; report: ResearchReport; queries: Record<string, unknown>[]; citations: Record<string, unknown>[]; error: string | null }>(`/api/research/${id}`),
+  deleteResearch: (id: string) => deleteRequest(`/api/research/${id}`),
+  sources: (params: { domain?: string; type?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (params.domain) query.set("domain", params.domain);
+    if (params.type) query.set("type", params.type);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return getJson<SourceListResponse>(`/api/sources${suffix}`);
+  },
+  source: (id: string) => getJson<Source>(`/api/sources/${id}`),
+  sourceSnapshot: (id: string) =>
+    getJson<{ source_id: string; content: string; content_hash: string; extractor: string; char_count: number; extracted_at: string | null }>(`/api/sources/${id}/snapshot`),
+  deleteSource: (id: string) => deleteRequest(`/api/sources/${id}`),
 };
 
 /** Startet den SSE-Stream. Aufrufer liest Events via streamSSE(). */
@@ -143,6 +183,7 @@ export async function openChatStream(
   message: string,
   signal?: AbortSignal,
   mode?: CommunicationModeKey | null,
+  research?: string,
 ): Promise<Response> {
   const response = await fetch("/api/chat/stream", {
     method: "POST",
@@ -151,6 +192,7 @@ export async function openChatStream(
       conversation_id: conversationId ?? undefined,
       message,
       mode: mode || undefined,
+      research: research || "auto",
     }),
     signal,
   });

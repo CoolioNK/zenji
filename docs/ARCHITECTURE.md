@@ -1,13 +1,16 @@
-# ZENJI – Architektur (Phase 1 + 2)
+# ZENJI – Architektur (Phase 1 + 2 + 3)
 
 ZENJI ist ein **eigenständiges, modulares KI-System**. Das Sprachmodell ist
 nur sein Generierungskern – Architektur, Steuerung, Persönlichkeit, Regeln,
-Gedächtnis, Kontextverwaltung und zukünftige Erweiterungen gehören zum
-selbst entwickelten ZENJI-System.
+Gedächtnis, Kontextverwaltung, Internet-Recherche und zukünftige
+Erweiterungen gehören zum selbst entwickelten ZENJI-System.
 
 **Leitprinzip (Phase 2):** Das Modell erzeugt Antworten. ZENJI entscheidet,
 mit welcher Identität, welchen Regeln, welchen Erinnerungen und welchem
 Kontext diese Antworten entstehen.
+
+**Leitprinzip (Phase 3):** ZENJI recherchiert selbst, bewertet Quellen und
+belegt Antworten nachvollziehbar – das Modell erfindet keine Belege.
 
 ## 1. Schichtenübersicht
 
@@ -15,13 +18,15 @@ Kontext diese Antworten entstehen.
 ┌────────────────────────────────────────────────────────────┐
 │ Frontend (React + TypeScript + Vite + Tailwind)             │
 │  Sidebar · Chat · Streaming (SSE) · Einstellungen · Status   │
-│  Control Center: Personality · Policies · Memory · Core      │
+│  Recherche-Steuerung + Live-Panel (Chat) · Tab „Web" (CC)    │
+│  Control Center: Personality · Policies · Memory · Core · Web│
 └──────────────────────────────┬─────────────────────────────┘
                                │ HTTP / SSE (/api/*)
 ┌──────────────────────────────▼─────────────────────────────┐
 │ FastAPI (app/api/routes)                                    │
 │  health · models · settings · conversations · chat          │
 │  personality · policies · memory · core (Phase 2)           │
+│  web · research · sources (Phase 3)                         │
 ├────────────────────────────────────────────────────────────┤
 │ Services (app/services)                                     │
 │  ChatService        Persistenz + LLM-Aufruf; Kontext kommt  │
@@ -29,6 +34,19 @@ Kontext diese Antworten entstehen.
 │  ConversationService CRUD für mehrere Chats                  │
 │  SettingsService    Laufzeit-Konfiguration (DB ∪ Defaults)   │
 │  ZenjiCore          Orchestrierung aller Engines (Phase 2)  │
+│  WebIntelligenceService Fassade Recherche (Phase 3)         │
+├────────────────────────────────────────────────────────────┤
+│ Web Intelligence (app/web_intelligence, Phase 3)            │
+│  search_engine      SearXNG/Brave, Normalisierung, Dedupe   │
+│  browser_engine     httpx (+Playwright), robots, Host-Pause │
+│  ssrf               URL/IP-Schutz, Redirect-Prüfung         │
+│  content_extractor  trafilatura/BS4 → Text + Metadaten      │
+│  source_manager     Registrierung, Snapshots, Dedupe        │
+│  source_analysis    Quelltyp, Frische, Relevanz, Konflikte  │
+│  citation_engine    Marker-Whitelist, erfundene Belege raus │
+│  research_cache     Such-/Abruf-Cache mit TTL               │
+│  research_planner   Bedarfserkennung, Pläne, Limits         │
+│  research_engine    Orchestrator (Report, Live-Events)      │
 ├────────────────────────────────────────────────────────────┤
 │ Engines (app/engines)                                       │
 │  PersonalityEngine  Profile laden → Persönlichkeitskontext   │
@@ -45,6 +63,8 @@ Kontext diese Antworten entstehen.
 │ Datenbank (app/database)                                    │
 │  Database (SQLite/WAL) · ConversationModel · MessageModel    │
 │  SettingModel · PersonalityModel · PolicyModel · MemoryModel │
+│  research_sessions · search_* · sources · snapshots ·        │
+│  citations · research_cache (Phase 3)                        │
 │  SchemaVersion · Repositories · Migrationen + Seeds          │
 ├────────────────────────────────────────────────────────────┤
 │ Core (app/core)                                             │
@@ -64,13 +84,14 @@ Kontext diese Antworten entstehen.
   implementieren `LLMProvider` (in `app/engines/providers/base.py`) und
   registrieren sich in `app/engines/providers/__init__.py`.
 
-## 3. Chat-Datenfluss (Phase 2 + v0.3.0)
+## 3. Chat-Datenfluss (Phase 2 + v0.3.0 + v0.5.0)
 
 ```
 Nutzer → POST /api/chat/stream
   1. preflight: Settings laden, Konversation prüfen, Modell prüfen
      → Fehler hier = saubere HTTP-Meldung (503/502/409/404)
-  2. Nutzernachricht persistieren
+  2. Nutzernachricht persistieren (eigene Transaktion, commit vor
+     der Recherche – verhindert SQLite-Schreibkonflikte)
   3. ZENJI Core orchestriert (prepare_turn):
      a. Settings laden                      (SettingsService)
      b. Persönlichkeit laden + kompilieren  (PersonalityEngine)
@@ -79,16 +100,26 @@ Nutzer → POST /api/chat/stream
                                               → Standard; temporär, v0.3.0)
      d. Aktive Regeln kompilieren           (PolicyEngine, mit Konfliktreport)
      e. Relevante Erinnerungen suchen       (MemoryEngine, FTS5/LIKE)
+     e2. Web-Recherche (v0.5.0, fail-soft):
+         Modus normalisieren (auto/off/quick|standard|deep) →
+         Bedarfserkennung (nur auto) → ResearchEngine.run
+         mit Live-Ereignissen → Report + Kontext-Datenblock
      f. Verlauf laden                       (ConversationService, max. 50)
-     g. Kontext bauen + Budget prüfen       (ContextEngine, ein Systemprompt)
+     g. Kontext bauen + Budget prüfen       (ContextEngine, ein Systemprompt;
+                                             Recherche zwischen Erinnerungen
+                                             und Verlauf als Datenblock)
      h. Injection-Prüfung der Anfrage       (PolicyEngine.check_incoming,
                                              fail-soft, nur Flags)
   4. LLMEngine.stream(...) → OllamaProvider → NDJSON → StreamChunk
-  5. SSE-Ereignisse: start → delta* → done (oder error)
-  6. Assistentennachricht persistieren (auch Teilantworten bei
+  5. SSE-Ereignisse: start → research* (echte Recherche-Schritte) →
+     delta* → done (oder error)
+  6. Zitat-Validierung: CitationEngine entfernt erfundene [n]-Marker
+     (Warnungen bleiben im done-Event sichtbar)
+  7. Assistentennachricht persistieren (auch Teilantworten bei
      Abbruch/Fehlern – der Chatverlauf bleibt konsistent)
-  7. ZENJI Core Nachbereitung (finalize_turn):
+  8. ZENJI Core Nachbereitung (finalize_turn):
      Merkwörter speichern (source=chat) · last_used_at setzen
+     (Recherche-Reports gehen NICHT automatisch ins Gedächtnis)
 ```
 
 Nicht-streamender Pfad (`POST /api/chat`) nutzt dieselbe Logik mit
@@ -136,8 +167,15 @@ den CommunicationManager:
 | `MemoryEngine` | `app/engines/memory_engine.py` | **MEMORY_ENGINE.md** |
 | `ContextEngine` | `app/engines/context_engine.py` | **CONTEXT_ENGINE.md** |
 | `ZenjiCore` (Orchestrierung) | `app/services/zenji_core.py` | ARCHITECTURE.md, §3 |
+| `WebIntelligenceService` (Fassade) | `app/services/web_intelligence_service.py` | **WEB_INTELLIGENCE.md** |
 
-Zukünftige Engines (Phase 3+):
+Phase-3-Komponenten (`app/web_intelligence/`): search_engine, browser_engine,
+ssrf, content_extractor, source_manager, source_analysis, citation_engine,
+research_cache, research_planner, research_engine – Dokumentation:
+**SEARCH_ENGINE.md**, **BROWSER_ENGINE.md**, **RESEARCH_ENGINE.md**,
+**SOURCE_MANAGEMENT.md**, **CITATION_SYSTEM.md**, **WEB_SECURITY.md**.
+
+Weitere zukünftige Engines (Phase 3+):
 
 | Engine | Zweck | Registrierung |
 |---|---|---|
@@ -172,6 +210,12 @@ Einheitliches Format `{"error": {"code", "message", "detail"}}`.
 | POLICY_ID_TAKEN | 409 | Regel-ID bereits vergeben |
 | MEMORY_NOT_FOUND | 404 | Unbekannte Erinnerung |
 | VALIDATION_ERROR | 422 | Ungültige Anfrage/Einstellung |
+| WEB_SECURITY_BLOCKED | 403 | Abruf abgelehnt (private Adresse, robots) |
+| SEARCH_PROVIDER_UNAVAILABLE | 502 | Suchanbieter nicht erreichbar |
+| WEB_FETCH_FAILED | 502 | Seitenabruf fehlgeschlagen |
+| WEB_INTELLIGENCE_ERROR | 502 | Allgemeiner Web-Intelligence-Fehler |
+| RESEARCH_NOT_FOUND | 404 | Unbekannte Recherche-Session |
+| SOURCE_NOT_FOUND | 404 | Unbekannte Quelle |
 | INTERNAL_ERROR | 500 | Unerwarteter Fehler (geloggt) |
 
 ## 8. Engine-Dokumentation
@@ -183,3 +227,10 @@ Datenflüsse und Zusammenspiel der Engines (Phase 2 + v0.3.0):
 - **POLICY_ENGINE.md** – Prioritäten, Konflikte, System-Schutz, Injection
 - **MEMORY_ENGINE.md** – Typen, Suche, Duplikate, Veralten, Merkwörter
 - **CONTEXT_ENGINE.md** – Token-Budget, Systemprompt-Compile, Nachvollziehbarkeit
+- **WEB_INTELLIGENCE.md** – Phase 3 Überblick: Moduse, Datenfluss, Konfiguration
+- **SEARCH_ENGINE.md** – Suchanbieter, Normalisierung, Dedupe
+- **BROWSER_ENGINE.md** – Abrufe, robots.txt, SSRF, Playwright-Fallback
+- **RESEARCH_ENGINE.md** – Planner, Orchestrator, Report, Live-Events
+- **SOURCE_MANAGEMENT.md** – Quellen, Snapshots, Bewertung, Konflikte
+- **CITATION_SYSTEM.md** – Marker-Whitelist, erfundene Belege entfernen
+- **WEB_SECURITY.md** – SSRF, Geheimnisse, Ehrlichkeit, Nutzerkontrolle

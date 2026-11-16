@@ -16,6 +16,7 @@ from app.engines.policy_engine import PolicyEngine
 from app.services.chat_service import ChatService
 from app.services.conversation_service import ConversationService
 from app.services.settings_service import SettingsService
+from app.services.web_intelligence_service import WebIntelligenceService
 from app.services.zenji_core import ZenjiCore
 
 
@@ -72,3 +73,10 @@ def get_context_engine(request: Request) -> ContextEngine:
 
 def get_zenji_core(request: Request) -> ZenjiCore:
     return request.app.state.zenji_core
+
+
+# --- Phase 3: Web Intelligence ----------------------------------------------------
+
+
+def get_web_intelligence(request: Request) -> "WebIntelligenceService":
+    return request.app.state.web_intelligence

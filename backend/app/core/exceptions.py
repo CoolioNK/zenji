@@ -151,3 +151,49 @@ class MemoryNotFoundError(ZenjiError):
 
     status_code = 404
     code = "MEMORY_NOT_FOUND"
+
+
+# --- Phase 3: Web Intelligence ---------------------------------------------------
+
+
+class WebIntelligenceError(ZenjiError):
+    """Basis aller Web-Recherche-Fehler."""
+
+    status_code = 502
+    code = "WEB_INTELLIGENCE_ERROR"
+
+
+class WebSecurityError(WebIntelligenceError):
+    """Eine URL wurde vom SSRF-/Netzwerk-Schutz blockiert."""
+
+    status_code = 403
+    code = "WEB_SECURITY_BLOCKED"
+
+
+class SearchProviderError(WebIntelligenceError):
+    """Der Suchanbieter (SearXNG/Brave) ist nicht erreichbar oder antwortet
+    fehlerhaft – verständliche Nutzermeldung statt Stacktrace."""
+
+    status_code = 502
+    code = "SEARCH_PROVIDER_UNAVAILABLE"
+
+
+class WebFetchError(WebIntelligenceError):
+    """Eine Website konnte nicht geladen werden (Netzwerk, Timeout, …)."""
+
+    status_code = 502
+    code = "WEB_FETCH_FAILED"
+
+
+class ResearchNotFoundError(ZenjiError):
+    """Die angeforderte Recherchesession existiert nicht."""
+
+    status_code = 404
+    code = "RESEARCH_NOT_FOUND"
+
+
+class SourceNotFoundError(ZenjiError):
+    """Die angeforderte Quelle existiert nicht."""
+
+    status_code = 404
+    code = "SOURCE_NOT_FOUND"

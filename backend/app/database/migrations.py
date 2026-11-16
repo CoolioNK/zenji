@@ -16,6 +16,11 @@ Philosophie (siehe docs/DEVELOPMENT.md):
 - Stufe 4 (v0.4.0, Beleidigungs-Banter) ergänzt die neue Systemregel
   ``insult_banter`` und bringt die Texte der Systemregeln (u. a.
   ``communication_freedom``) auf den aktuellen Seed-Stand.
+- Stufe 5 (v0.5.0, Web Intelligence) ergänzt sieben Recherche-Tabellen
+  (``research_sessions``, ``search_queries``, ``search_results``,
+  ``sources``, ``source_snapshots``, ``citations``, ``research_cache``).
+  Diese werden von ``create_all`` angelegt – die Stufe selbst dokumentiert
+  nur den Aktivierungspunkt und greift bestehende Daten nicht an.
 - Seeding ist bewusst **additiv**: existierende Nutzerdaten werden niemals
   überschrieben oder gelöscht; fehlende Standardprofile/-regeln werden nur
   ergänzt.  (Ausnahme in Stufe 3, bewusst eng begrenzt: der **Text** von
@@ -65,7 +70,7 @@ PERSONALITIES_FILE = CONFIG_DIR / "personalities.json"
 POLICIES_FILE = CONFIG_DIR / "system_policies.json"
 
 #: Aktuelle Schema-Stufe. Erhöhen, wenn eine neue Migration hinzukommt.
-LATEST_VERSION = 4
+LATEST_VERSION = 5
 
 # --- Migrationsstufen --------------------------------------------------------
 
@@ -123,10 +128,22 @@ def _migrate_3_to_4(session: Session) -> None:
     _refresh_system_rule_texts(session)
 
 
+def _migrate_4_to_5(session: Session) -> None:
+    """v0.5.0 (Web Intelligence): Aktivierungspunkt der Recherche-Tabellen.
+
+    ``create_all`` hat die sieben neuen Tabellen bereits angelegt (reine
+    Tabellen-*hinzufügung*); hier gibt es keine Datenmigration.  Bestehende
+    Tabellen, Regeln, Profile und Erinnerungen bleiben unberührt – die
+    Regelanzahl (9 Regeln / 8 System) ändert sich nicht.
+    """
+    return None
+
+
 MIGRATIONS: dict[int, Callable[[Session], None]] = {
     2: _migrate_1_to_2,
     3: _migrate_2_to_3,
     4: _migrate_3_to_4,
+    5: _migrate_4_to_5,
 }
 
 

@@ -1,9 +1,11 @@
-/* Chat-Hauptbereich inkl. Fehlerbanner (fehlendes Modell, Offline-Zustände). */
+/* Chat-Hauptbereich inkl. Fehlerbanner (fehlendes Modell, Offline-Zustände)
+   + Recherche-Live-Panel (v0.5.0). */
 
 import { useEffect, useRef } from "react";
 import { Composer } from "./Composer";
 import { MessageBubble } from "./MessageBubble";
-import type { ChatError, CommunicationModeKey, Health, Message } from "../types";
+import type { ChatError, ChatResearchSummary, CommunicationModeKey, Health, Message, ResearchMode } from "../types";
+import type { ResearchProgressEvent } from "../hooks/useChat";
 
 export function ChatArea({
   messages,
@@ -12,13 +14,21 @@ export function ChatArea({
   health,
   onSend,
   onStop,
+  researchMode = "auto",
+  onResearchModeChange,
+  researchEvents = [],
+  researchSummary = null,
 }: {
   messages: Message[];
   streaming: boolean;
   chatError: ChatError | null;
   health: Health | null;
-  onSend: (text: string, mode: CommunicationModeKey | null) => void;
+  onSend: (text: string, mode: CommunicationModeKey | null, research: ResearchMode) => void;
   onStop: () => void;
+  researchMode?: ResearchMode;
+  onResearchModeChange?: (mode: ResearchMode) => void;
+  researchEvents?: ResearchProgressEvent[];
+  researchSummary?: ChatResearchSummary | null;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -44,6 +54,52 @@ export function ChatArea({
           {chatError && (
             <div className="rounded-xl border border-signal-red/40 bg-ink-850 px-4 py-3 text-[13px] leading-relaxed text-signal-red">
               <span className="font-medium">Fehler ({chatError.code}):</span> {chatError.message}
+            </div>
+          )}
+
+          {/* Web-Recherche: echter Fortschritt + ehrliche Quellenübersicht (v0.5.0) */}
+          {(researchEvents.length > 0 || researchSummary) && (
+            <div className="rounded-xl border border-ink-600 bg-ink-850 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-jade-600">
+                  Web-Recherche
+                </span>
+                {researchSummary && (
+                  <span className="font-mono text-[10px] text-ink-400">
+                    {researchSummary.sources.length} Quelle(n)
+                    {researchSummary.contradiction_count > 0 &&
+                      ` · ${researchSummary.contradiction_count} Widerspruch(e)`}
+                    {researchSummary.citations_corrected > 0 &&
+                      ` · ${researchSummary.citations_corrected} Marker korrigiert`}
+                  </span>
+                )}
+              </div>
+
+              {/* Live-Schritte (nur tatsächlich ausgeführte) */}
+              <ul className="mt-2 space-y-1">
+                {researchEvents.slice(-5).map((event, index) => (
+                  <li key={`${index}-${event.step}`} className="flex gap-2 text-[12px] text-ink-300">
+                    <span className="shrink-0 font-mono text-[10px] text-jade-600">{event.step}</span>
+                    <span className="min-w-0 truncate">{event.detail}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Quellenübersicht nach Abschluss */}
+              {researchSummary && researchSummary.sources.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5 border-t border-ink-700 pt-2">
+                  {researchSummary.sources.map((source) => (
+                    <span
+                      key={`${source.marker}-${source.url}`}
+                      title={source.url}
+                      className="inline-flex max-w-full items-center gap-1 rounded-full border border-ink-600 bg-ink-900 px-2 py-0.5 font-mono text-[10px] text-ink-300"
+                    >
+                      <span className="text-jade-600">[{source.marker}]</span>
+                      <span className="max-w-[220px] truncate">{source.title || source.url}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -74,7 +130,14 @@ export function ChatArea({
         </div>
       </div>
 
-      <Composer disabled={health === null} streaming={streaming} onSend={onSend} onStop={onStop} />
+      <Composer
+        disabled={health === null}
+        streaming={streaming}
+        onSend={onSend}
+        onStop={onStop}
+        research={researchMode}
+        onResearchChange={onResearchModeChange}
+      />
     </section>
   );
 }

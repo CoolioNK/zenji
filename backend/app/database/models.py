@@ -253,3 +253,177 @@ def content_hash(text: str) -> str:
     import hashlib
 
     return hashlib.sha256(normalize_content(text).encode("utf-8")).hexdigest()[:32]
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Web Intelligence (Recherche, Quellen, Zitate, Cache)
+# ---------------------------------------------------------------------------
+
+RESEARCH_MODES = ("quick", "standard", "deep")
+RESEARCH_STATUSES = ("running", "done", "partial", "failed", "cancelled")
+SOURCE_STATUSES = ("ok", "truncated", "blocked", "failed")
+SOURCE_TYPES = (
+    "offiziell",
+    "wissenschaftlich",
+    "fachquelle",
+    "nachrichten",
+    "community",
+    "meinung",
+    "unbekannt",
+)
+
+
+class ResearchSessionModel(Base):
+    """Eine Recherche-Session (Research Engine Durchlauf inkl. Ergebnis)."""
+
+    __tablename__ = "research_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "mode IN ('quick','standard','deep')", name="ck_research_mode"
+        ),
+        CheckConstraint(
+            "status IN ('running','done','partial','failed','cancelled')",
+            name="ck_research_status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    question: Mapped[str] = mapped_column(Text)
+    mode: Mapped[str] = mapped_column(String(10), default="standard")
+    status: Mapped[str] = mapped_column(String(12), default="running")
+    plan_json: Mapped[str] = mapped_column(Text, default="{}")
+    report_json: Mapped[str] = mapped_column(Text, default="{}")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_count: Mapped[int] = mapped_column(default=0)
+    duration_ms: Mapped[int | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class SearchQueryModel(Base):
+    """Eine ausgeführte Suchanfrage (nachvollziehbarer Recherche-Verlauf)."""
+
+    __tablename__ = "search_queries"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("research_sessions.id", ondelete="CASCADE"), index=True
+    )
+    query: Mapped[str] = mapped_column(Text)
+    provider: Mapped[str] = mapped_column(String(40), default="")
+    result_count: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SearchResultModel(Base):
+    """Ein einzelnes Suchergebnis (normalisiert, dedupliziert)."""
+
+    __tablename__ = "search_results"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    query_id: Mapped[str] = mapped_column(
+        ForeignKey("search_queries.id", ondelete="CASCADE"), index=True
+    )
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("research_sessions.id", ondelete="CASCADE"), index=True
+    )
+    url: Mapped[str] = mapped_column(Text)
+    domain: Mapped[str] = mapped_column(String(255), default="", index=True)
+    title: Mapped[str] = mapped_column(Text, default="")
+    snippet: Mapped[str] = mapped_column(Text, default="")
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    rank: Mapped[int] = mapped_column(default=0)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SourceModel(Base):
+    """Eine recherchierte Quelle (global, per Canonical-URL dedupliziert)."""
+
+    __tablename__ = "sources"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ok','truncated','blocked','failed')",
+            name="ck_source_status",
+        ),
+        CheckConstraint(
+            "source_type IN "
+            "('offiziell','wissenschaftlich','fachquelle','nachrichten','community','meinung','unbekannt')",
+            name="ck_source_type",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    original_url: Mapped[str] = mapped_column(Text)
+    canonical_url: Mapped[str] = mapped_column(Text, index=True)
+    domain: Mapped[str] = mapped_column(String(255), default="", index=True)
+    title: Mapped[str] = mapped_column(Text, default="")
+    author: Mapped[str | None] = mapped_column(Text, nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    content_hash: Mapped[str] = mapped_column(String(64), default="", index=True)
+    http_status: Mapped[int] = mapped_column(default=0)
+    status: Mapped[str] = mapped_column(String(12), default="ok")
+    source_type: Mapped[str] = mapped_column(String(20), default="unbekannt")
+    content_chars: Mapped[int] = mapped_column(default=0)
+    quality_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class SourceSnapshotModel(Base):
+    """Inhaltssnapshot einer Quelle (**ein** Snapshot je Quelle – Upsert).
+
+    Speicherbegrenzung: Neuer Abruf ersetzt den alten Snapshot derselben
+    Quelle, statt History anzuhäufen.
+    """
+
+    __tablename__ = "source_snapshots"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    source_id: Mapped[str] = mapped_column(
+        ForeignKey("sources.id", ondelete="CASCADE"), index=True, unique=True
+    )
+    content: Mapped[str] = mapped_column(Text, default="")
+    content_hash: Mapped[str] = mapped_column(String(64), default="")
+    extractor: Mapped[str] = mapped_column(String(20), default="")
+    char_count: Mapped[int] = mapped_column(default=0)
+    extracted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CitationModel(Base):
+    """Aussage ↔ Quelle-Beleg innerhalb einer Recherche-Session."""
+
+    __tablename__ = "citations"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("research_sessions.id", ondelete="CASCADE"), index=True
+    )
+    source_id: Mapped[str] = mapped_column(
+        ForeignKey("sources.id", ondelete="CASCADE"), index=True
+    )
+    statement: Mapped[str] = mapped_column(Text, default="")
+    marker: Mapped[str] = mapped_column(String(8), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ResearchCacheModel(Base):
+    """Research Cache mit Ablaufdatum (TTL, löschbar, begrenzt)."""
+
+    __tablename__ = "research_cache"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    cache_key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="fetch")
+    payload: Mapped[str] = mapped_column(Text, default="{}")
+    content_hash: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

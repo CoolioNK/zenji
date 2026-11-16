@@ -1,7 +1,8 @@
-/* Eingabebereich: autoskalierendes Textfeld, Senden/Stopp + Moduswahl (v0.3.0). */
+/* Eingabebereich: autoskalierendes Textfeld, Senden/Stopp + Moduswahl (v0.3.0)
+   + Recherche-Steuerung (v0.5.0). */
 
-import { useRef, useState } from "react";
-import type { CommunicationModeKey } from "../types";
+import { useEffect, useRef, useState } from "react";
+import type { CommunicationModeKey, ResearchMode } from "../types";
 
 const MODE_OPTIONS: { value: CommunicationModeKey | ""; label: string }[] = [
   { value: "", label: "Modus: Auto" },
@@ -12,25 +13,43 @@ const MODE_OPTIONS: { value: CommunicationModeKey | ""; label: string }[] = [
   { value: "open_talk", label: "Open Talk" },
 ];
 
+const RESEARCH_OPTIONS: { value: ResearchMode; label: string; title: string }[] = [
+  { value: "auto", label: "Web: Auto", title: "Recherche-Bedarf wird automatisch erkannt" },
+  { value: "off", label: "Web: Aus", title: "Keine Internet-Recherche für diese Nachricht" },
+  { value: "quick", label: "Web: Schnell", title: "Recherche erzwingen (1 Suchanfrage)" },
+  { value: "standard", label: "Web: Standard", title: "Recherche erzwingen (ausgewogen)" },
+  { value: "deep", label: "Web: Tief", title: "Recherche erzwingen (umfassend)" },
+];
+
 export function Composer({
   disabled,
   streaming,
   onSend,
   onStop,
+  research = "auto",
+  onResearchChange,
 }: {
   disabled?: boolean;
   streaming: boolean;
-  onSend: (text: string, mode: CommunicationModeKey | null) => void;
+  onSend: (text: string, mode: CommunicationModeKey | null, research: ResearchMode) => void;
   onStop: () => void;
+  research?: ResearchMode;
+  onResearchChange?: (mode: ResearchMode) => void;
 }) {
   const [value, setValue] = useState("");
   const [mode, setMode] = useState<CommunicationModeKey | "">("");
+  const [researchMode, setResearchMode] = useState<ResearchMode>(research);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  /* Externe Änderung (ChatPage) übernehmen: */
+  useEffect(() => {
+    setResearchMode(research);
+  }, [research]);
 
   const submit = () => {
     const text = value.trim();
     if (!text || disabled || streaming) return;
-    onSend(text, mode === "" ? null : mode);
+    onSend(text, mode === "" ? null : mode, researchMode);
     setValue("");
     textareaRef.current?.focus();
   };
@@ -67,6 +86,24 @@ export function Composer({
             </option>
           ))}
         </select>
+        {onResearchChange && (
+          <select
+            value={researchMode}
+            onChange={(e) => {
+              const next = e.target.value as ResearchMode;
+              setResearchMode(next);
+              onResearchChange(next);
+            }}
+            title="Internet-Recherche für die nächste Nachricht (Auto erkennt den Bedarf)"
+            className="h-11 shrink-0 rounded-xl border border-ink-600 bg-ink-850 px-2 text-[12px] text-ink-200 outline-none transition-colors hover:border-jade-600 focus:border-jade-600"
+          >
+            {RESEARCH_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value} title={option.title}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        )}
         {streaming ? (
           <button
             onClick={onStop}

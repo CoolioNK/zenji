@@ -100,12 +100,14 @@ Löscht Konversation **und** Nachrichten (Kaskade) → `204`.
 
 ## POST /api/chat
 
-Nicht-streamend. Body: `{"conversation_id": "optional", "message": "…", "mode": "optional"}`.
+Nicht-streamend. Body: `{"conversation_id": "optional", "message": "…", "mode": "optional", "research": "optional"}`.
 Ohne `conversation_id` wird automatisch eine Konversation angelegt
 (Titel = Anfang der ersten Nachricht). `mode` erzwingt einen
 Kommunikationsmodus (`casual|roast|focus|empathy|open_talk`, v0.3.0); ohne
 `mode` wählt der CommunicationManager automatisch (siehe
-**COMMUNICATION_MODES.md**). Unbekannter Modus → `422`.
+**COMMUNICATION_MODES.md**). `research` steuert die Web-Recherche
+(v0.5.0): `auto` (Default, Bedarfserkennung) | `off` | `quick` |
+`standard` | `deep`. Unbekannter Modus → `422`.
 
 ```json
 {
@@ -128,11 +130,18 @@ Eventfolge:
 event: start
 data: {"conversation_id": "…", "user_message_id": "…", "assistant_message_id": null}
 
+event: research          (nur bei laufender Recherche, v0.5.0 – ECHTE Schritte)
+data: {"step": "searching", "detail": "Suche: neueste python-version"}
+
 event: delta
 data: {"content": "Antwortteil "}
 
 event: done
-data: {"conversation_id": "…", "assistant_message_id": "…", "content": "vollständiger Text"}
+data: {"conversation_id": "…", "assistant_message_id": "…", "content": "vollständiger Text",
+       "research": { "session_id": "…", "status": "done", "mode": "quick",
+                     "queries": ["…"], "sources": [ { "marker": 1, "title": "…", "url": "…",
+                     "source_type": "offiziell", "status": "ok" } ],
+                     "contradiction_count": 0, "citations_corrected": 1, "warnings": [] }}
 ```
 
 Bei Fehlern **im** Stream: `event: error` mit `{code, message}`. Bereits
@@ -306,6 +315,7 @@ Kommunikationsmodus im Entwurf).
   "history_kept": 4, "history_dropped": 2,
   "memories_kept": 2, "memories_dropped": 0, "conflicts": 1,
   "flags": [],
+  "research_planned": true, "research_tokens": 0,
   "system_text": "## Identität\n…",
   "messages": [ { "role": "system", "content": "…(gekürzt)", "chars": 2310 } ],
   "used_memory_ids": ["…"]
@@ -314,3 +324,100 @@ Kommunikationsmodus im Entwurf).
 
 Damit ist jede Anfrage vollständig erklärenbar: welche Abschnitte,
 wie viele Tokens, welche Erinnerungen im Kontext waren.
+`research_planned` zeigt, ob der Planner Bedarf erkennen **würde**
+(v0.5.0). Die Vorschau recherchiert grundsätzlich **nie live**
+(`research_tokens` bleibt 0, kein Netzwerkzugriff durch eine Vorschau).
+
+---
+
+# Phase 3: Web Intelligence
+
+Suche, Recherche und Quellenverwaltung (v0.5.0). Details:
+**WEB_INTELLIGENCE.md** und Unterdokumente.
+
+## Web (/api/web)
+
+### POST /api/web/search
+Einzelne Websuche. Body: `{"query": "…", "provider": "optional searxng|brave", "limit": 1–25}`.
+
+```json
+{ "query": "neueste python-version", "provider": "searxng",
+  "results": [ { "title": "…", "url": "https://…", "domain": "example.com",
+                 "snippet": "…", "provider": "searxng", "rank": 1,
+                 "published_at": "2026-11-02T00:00:00+00:00" } ] }
+```
+
+Fehler: `502 SEARCH_PROVIDER_UNAVAILABLE` (Anbieter nicht erreichbar) · `422`.
+
+### GET /api/web/settings
+Einstellungen lesen. `brave_api_key` wird **nie** zurückgegeben:
+
+```json
+{ "provider": "searxng", "searxng_url": "http://localhost:8888",
+  "brave_api_key_set": false, "language": "de", "cache_ttl_s": 1800.0 }
+```
+
+### PATCH /api/web/settings
+Änderbar: `provider`, `searxng_url` (http/https), `brave_api_key`
+(leerer String = Schlüssel entfernen), `language`, `cache_ttl_s`
+(60–86400). Antwort wie oben (ohne Schlüssel).
+
+### GET /api/web/status
+Ehrlicher Betriebszustand – kein Fake „verbunden“:
+
+```json
+{ "provider": "searxng",
+  "search": { "available": false, "detail": "SearXNG nicht erreichbar" },
+  "browser": { "httpx": { "available": true }, "playwright": { "available": false, "detail": "nicht installiert" },
+               "robots_respected": true, "per_host_delay_s": 1.0, "stats": {} },
+  "cache": { "total": 0, "ttl_s": 1800.0 },
+  "storage": { "research_sessions": 0, "sources": 0, "citations": 0, "cache_entries": 0, … },
+  "planner_modes": ["quick", "standard", "deep"],
+  "version": "0.5.0" }
+```
+
+### DELETE /api/web/cache
+Leert Such- und Abruf-Cache vollständig. → `{"deleted": 3}`
+
+## Recherche (/api/research)
+
+### POST /api/research
+Vollständiger Durchlauf. Body: `{"question": "…", "mode": "quick|standard|deep"}`
+→ Report-Dict 1:1 (siehe **RESEARCH_ENGINE.md** §3).
+
+### POST /api/research/stream
+Derselbe Durchlauf als SSE: `start` → `research`* (echte Schritte:
+`planned`, `searching`, `found`, `fetching`, `fetched`, `blocked`,
+`search_failed`, `comparing`, `done`) → `done` (Report) oder `error`.
+Verbindungsabbruch setzt das Abort-Event – kein Nachlauf.
+
+### GET /api/research
+Historie (neueste zuerst): `[{ "session_id", "question", "mode", "status",
+"source_count", "duration_ms", "created_at" }]`.
+
+### GET /api/research/{id}
+Voller Report + Plan + Suchanfragen + Zitate. `404 RESEARCH_NOT_FOUND`.
+
+### DELETE /api/research/{id}
+Löscht Session + Zitate. → `{"deleted": true, "id": "…"}`
+
+## Quellen (/api/sources)
+
+### GET /api/sources
+Filter: `domain`, `type` (offiziell|wissenschaftlich|fachquelle|
+nachrichten|community|meinung|unbekannt), `limit`.
+
+```json
+{ "total": 1, "sources": [ { "id": "…", "original_url": "…", "canonical_url": "…",
+    "domain": "example.com", "title": "…", "author": null, "published_at": null,
+    "fetched_at": "…", "content_hash": "…", "http_status": 200, "status": "ok",
+    "source_type": "offiziell", "content_chars": 5312, "created_at": "…" } ] }
+```
+
+### GET /api/sources/{id} · GET /api/sources/{id}/snapshot
+Einzelquelle bzw. gespeicherter Inhalt (`{source_id, content, content_hash,
+extractor, char_count, extracted_at}`). `404 SOURCE_NOT_FOUND` (Snapshot
+auch, wenn die Quelle nur blockiert vermerkt wurde).
+
+### DELETE /api/sources/{id}
+Löscht Quelle + Snapshot endgültig.
