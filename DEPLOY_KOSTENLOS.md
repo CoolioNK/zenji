@@ -32,7 +32,13 @@ im Repo-Root enthält die komplette Service-Definition.
    |---|---|
    | `ZENJI_SUPABASE_URL` | `https://…supabase.co` |
    | `ZENJI_SUPABASE_ANON_KEY` | `sb_publishable_…` |
-   | `ZENJI_SUPABASE_DB_URL` | `postgresql://postgres:…@db.…supabase.co:5432/postgres` |
+   | `ZENJI_SUPABASE_DB_URL` | Session-pooler-URL, siehe Hinweis unten |
+
+> **Wichtig — Session-Pooler statt direkter DB-Adresse:** Die direkte
+> Adresse (`db.<ref>.supabase.co:5432`) ist **IPv6-only** und scheitert auf
+> Render mit „Network is unreachable". Nutze die IPv4-fähige
+> Session-Pooler-URL aus **Supabase → Connect → Session pooler** —
+> Format: `postgresql://postgres.<ref>:<pass>@aws-0-<region>.pooler.supabase.com:5432/postgres`
    | `ZENJI_CLOUDFLARE_ACCOUNT_ID` | 32-stellige Konto-ID |
    | `ZENJI_CLOUDFLARE_API_TOKEN` | Workers-AI-Token |
 
