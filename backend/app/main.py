@@ -103,6 +103,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     await extensions.stop_all()
     await state.llm_engine.aclose()
+    await state.supabase_auth.aclose()
     database.dispose()
     log.info("ZENJI Backend beendet.")
 

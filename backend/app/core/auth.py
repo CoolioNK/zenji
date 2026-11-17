@@ -22,6 +22,8 @@ Single-User-Modus (SQLite) – wichtig für Tests und Offline-Betrieb.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -36,6 +38,13 @@ from app.database.database import Database
 from app.database.models import ProfileModel
 
 log = get_logger("auth")
+
+#: Verifizierte Tokens werden kurz gecacht: jede Prüfung kostet einen HTTPS-
+#: Roundtrip zur Supabase-Auth-API (auf dem Free-Tier mit 0.1 CPU plus
+#: TLS-Handshake spürbar).  60 s sind sicherheitstechnisch harmlos – die
+#: Access-Tokens laufen ohnehin nach ~1 Stunde ab.
+_VERIFY_TTL = 60.0
+_VERIFY_CACHE_MAX = 100
 
 #: Pfade, die ohne Login erreichbar sind (Status/Modellinfo für die Login-Seite).
 PUBLIC_PATHS = frozenset(
@@ -65,18 +74,29 @@ class SupabaseAuth:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        self._client: httpx.AsyncClient | None = None
+        self._verified: dict[str, tuple[float, AuthUser]] = {}
 
     async def verify(self, token: str) -> AuthUser:
         if not self._settings.supabase_enabled:
             raise AuthError("Supabase ist nicht konfiguriert.")
+        key = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        cached = self._verified.get(key)
+        if cached is not None and time.monotonic() - cached[0] < _VERIFY_TTL:
+            return cached[1]
+        if len(self._verified) >= _VERIFY_CACHE_MAX:
+            self._verified.clear()
         url = f"{self._settings.supabase_rest_url}/auth/v1/user"
         headers = {
             "apikey": self._settings.supabase_anon_key,
             "Authorization": f"Bearer {token}",
         }
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(url, headers=headers)
+            # Client wiederverwenden: pro Request ein neuer Client kostet
+            # jedes Mal einen vollen TLS-Handshake (teuer auf schwacher CPU).
+            if self._client is None:
+                self._client = httpx.AsyncClient(timeout=10.0)
+            response = await self._client.get(url, headers=headers)
         except httpx.HTTPError as exc:
             raise AuthError(f"Supabase nicht erreichbar: {exc}") from exc
         if response.status_code != 200:
@@ -88,7 +108,16 @@ class SupabaseAuth:
         user_id = str(data.get("id") or "").strip()
         if not user_id:
             raise AuthError("Antwort enthält keine Nutzer-ID.")
-        return AuthUser(id=user_id, email=str(data.get("email") or ""))
+        user = AuthUser(id=user_id, email=str(data.get("email") or ""))
+        self._verified[key] = (time.monotonic(), user)
+        return user
+
+    async def aclose(self) -> None:
+        """HTTP-Client schließen (beim App-Down)."""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+        self._verified.clear()
 
 
 class SupabaseAuthMiddleware:

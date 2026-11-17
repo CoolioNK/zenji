@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -59,6 +60,11 @@ _TEXT_TASK_MARKERS = ("text generation", "text-generation")
 _QUANT_RE = re.compile(r"(fp8|fp16|int8|int4|awq|4bit|8bit)", re.IGNORECASE)
 _PARAM_RE = re.compile(r"(\d+(?:\.\d+)?)[bB](?=[-\s/]|$)")
 
+#: Der Modellkatalog ändert sich selten – ohne Cache würde jede Chat-Nachricht
+#: einen paginierten Katalog-Fetch auslösen (auf dem Render-Free-Tier mit
+#: 0.1 CPU mehrere Sekunden reine Wartezeit).
+_MODELS_CACHE_TTL = 300.0
+
 
 class CloudflareProvider(LLMProvider):
     """Provider für Cloudflare Workers AI (Modell-Inferenz in der Cloud)."""
@@ -75,6 +81,8 @@ class CloudflareProvider(LLMProvider):
         self._api_token = api_token.strip()
         self._config = config or CloudflareDefaults()
         self._client: httpx.AsyncClient | None = None
+        self._models_cache: list[ModelInfo] | None = None
+        self._models_cached_at: float = 0.0
         # Bewusst als Attribut `_base_url` (wie beim Ollama-Provider), damit
         # der Health-Endpoint den Endpunkt anzeigen kann.
         self._base_url = (
@@ -153,8 +161,15 @@ class CloudflareProvider(LLMProvider):
         return ProviderStatus(available=True, version="Workers AI")
 
     async def list_models(self) -> list[ModelInfo]:
-        """Text-Generierungs-Modelle des Cloudflare-Katalogs (paginiert)."""
+        """Text-Generierungs-Modelle des Cloudflare-Katalogs (paginiert).
+
+        Ergebnis wird 5 Minuten gecacht — der Katalog ändert sich selten und
+        der Fetch ist teuer (auf schwacher CPU mehrere Sekunden pro Turn).
+        """
         self._require_credentials()
+        now = time.monotonic()
+        if self._models_cache is not None and now - self._models_cached_at < _MODELS_CACHE_TTL:
+            return self._models_cache
         models: dict[str, ModelInfo] = {}
         page = 1
         collected = 0
@@ -188,7 +203,9 @@ class CloudflareProvider(LLMProvider):
             if not results or (total is not None and collected >= total):
                 break
             page += 1
-        return list(models.values())
+        self._models_cache = list(models.values())
+        self._models_cached_at = time.monotonic()
+        return self._models_cache
 
     async def model_info(self, model: str) -> ModelInfo:
         models = await self.list_models()

@@ -128,10 +128,11 @@ class Database:
         return create_engine(
             url,
             pool_pre_ping=True,
-            # Cloud (Supabase Pooler): Der Pooler trennt ungenutzte Verbindungen
-            # nach einiger Zeit – rechtzeitig selbst recyceln, damit pre_ping
-            # seltener neu verbinden muss (jede neue Verbindung kostet DNS/TLS).
-            pool_recycle=240,
+            # Cloud (Supabase Pooler): Session-Verbindungen bleiben serverseitig
+            # bis zu 30 min bestehen (client_lifetime).  Recycle knapp darunter
+            # hält die Verbindung warm – jeder Turn spart sich dann den teuren
+            # neuen TLS/DB-Handshake (auf dem Free-Tier mit 0.1 CPU Sekunden).
+            pool_recycle=1500,
             # Bei Pool-Erschöpfung schnell scheitern statt minutenlang zu
             # warten (blockiert sonst Anfragen und im schlimmsten Fall den
             # Event-Loop → Render startet die Instanz neu).
