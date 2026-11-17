@@ -37,9 +37,15 @@ Die chat-tauglichen Modelle des Katalogs listet `GET /api/models` auf
 
 | Modell | Charakter |
 |---|---|
-| `@cf/meta/llama-3.1-8b-instruct-fast` | sparsam, ideal für den Free-Plan |
-| `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | deutlich stärker, mehr Neuronen |
+| `@cf/meta/llama-3.1-8b-instruct-fp8` | sparsam (≈2 Neuronen/kurze Antwort), ideal für den Free-Plan |
+| `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | deutlich stärker (≈8× Neuronen), gelistet |
 | `@cf/qwen/qwen2.5-coder-32b-instruct` | code-fokussiert |
+
+Hinweise (Stand Katalog-Prüfung 17.11.2026): Denk-Modelle wie
+`@cf/qwen/qwen3-30b-a3b-fp8` funktionieren, verbrauchen aber Neuronen für
+Reasoning-Ausgaben (mit `strip_think` ggf. leere sichtbare Antwort bei
+kleinem `max_tokens`). Manche Modelle (z. B. `@cf/zai-org/glm-5.3-flash`)
+sind nur im Bezahlplan verfügbar (HTTP 403 im Free-Plan).
 
 ## Architektur
 
