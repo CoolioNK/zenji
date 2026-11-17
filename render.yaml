@@ -1,0 +1,42 @@
+# ZENJI Backend auf Render (Free-Plan, 0 €).
+# Blueprint: Im Render-Dashboard "New → Blueprint" → Repo verbinden →
+# Render liest diese Datei und fragt die 5 Secrets (sync: false) ab.
+# Speicher/Auth läuft komplett über Supabase; KI über Cloudflare Workers AI.
+
+services:
+  - type: web
+    name: zenji-api
+    runtime: python
+    rootDir: backend
+    pythonVersion: "3.12"
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      # --- KI-Modell: Cloudflare Workers AI (Free-Plan) ---
+      - key: ZENJI_LLM__PROVIDER
+        value: cloudflare
+      - key: ZENJI_LLM__MODEL
+        value: "@cf/meta/llama-3.1-8b-instruct-fp8"
+      - key: ZENJI_CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: ZENJI_CLOUDFLARE_API_TOKEN
+        sync: false
+      # --- Speicher & Auth: Supabase ---
+      - key: ZENJI_SUPABASE_URL
+        sync: false
+      - key: ZENJI_SUPABASE_ANON_KEY
+        sync: false
+      - key: ZENJI_SUPABASE_DB_URL
+        sync: false
+      # --- CORS / Frontend-Origin ---
+      - key: ZENJI_PUBLIC_BASE_URL
+        value: https://zenji.pages.dev
+      - key: ZENJI_CORS_ORIGINS
+        value: http://localhost:5173
+      # --- Logging (Render-Dateisystem ist ephemeral; Konsole reicht) ---
+      - key: ZENJI_LOG_DIR
+        value: /tmp/zenji-logs
+      - key: ZENJI_LOG_LEVEL
+        value: INFO
