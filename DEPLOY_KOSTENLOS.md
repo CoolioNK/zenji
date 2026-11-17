@@ -85,6 +85,15 @@ Damit schläft das Backend nie ein und antwortet sofort.
   Request nach 15+ Minuten Pause kann scheitern (Render-Edge antwortet
   während des Aufwachens mit 502/404, was im Browser als „Load failed"
   ankommt); erneuter Versuch nach ~1 Minute klappt.
+- **Free-Tier-Restarts:** Render kann Free-Instanzen jederzeit neu starten
+  (dokumentiert: „might restart at any time") und stellt pro Dienst nur
+  **0,1 CPU**. In solchen kurzen Fenstern kann ein Request mit 502/„Load
+  failed" scheitern — einfach nochmal senden. Der Health-Endpoint ist
+  bewusst leichtgewichtig (DB-Check mit 30-s-Cache, Sync-DB-Aufrufe im
+  Threadpool), damit Render die Instanz nicht wegen langsamer Checks neu
+  startet.
+- **Deploys:** Während eines Deploys (2–3 min nach jedem `git push`) ist die
+  Instanz kurzzeitig nicht erreichbar.
 - **Ephemerales Dateisystem:** Render verliert lokale Dateien bei Redeploys —
   irrelevant, da alle Daten in Supabase liegen (Cloud-Speicher-Modus).
 - **Deploy:** Jeder `git push` auf GitHub triggert automatisch einen neuen

@@ -125,7 +125,21 @@ class Database:
             url = "postgresql+psycopg://" + url[len("postgres://") :]
         elif url.startswith("postgresql://"):
             url = "postgresql+psycopg://" + url[len("postgresql://") :]
-        return create_engine(url, pool_pre_ping=True, future=True)
+        return create_engine(
+            url,
+            pool_pre_ping=True,
+            # Cloud (Supabase Pooler): Der Pooler trennt ungenutzte Verbindungen
+            # nach einiger Zeit – rechtzeitig selbst recyceln, damit pre_ping
+            # seltener neu verbinden muss (jede neue Verbindung kostet DNS/TLS).
+            pool_recycle=240,
+            # Bei Pool-Erschöpfung schnell scheitern statt minutenlang zu
+            # warten (blockiert sonst Anfragen und im schlimmsten Fall den
+            # Event-Loop → Render startet die Instanz neu).
+            pool_timeout=15,
+            # Neue Verbindungen nicht unbegrenzt warten lassen.
+            connect_args={"connect_timeout": 10},
+            future=True,
+        )
 
     def create_schema(self) -> None:
         """Erstellt das Schema, falls es noch nicht existiert (idempotent)."""

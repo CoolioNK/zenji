@@ -82,8 +82,13 @@ class ChatService:
         enden und nicht mitten im SSE-Stream."""
         settings = self._effective_settings()
         if request.conversation_id:
-            with self._db.session() as session:
-                self._conversations._require(session, request.conversation_id)
+
+            def _require_conversation() -> None:
+                with self._db.session() as session:
+                    self._conversations._require(session, request.conversation_id)
+
+            # Sync-DB nie im Event-Loop (Cloud: Blockaden → Instanz-Restarts).
+            await asyncio.to_thread(_require_conversation)
         await self._engine.ensure_model_available(settings.llm.model)
 
     # --- Kontextaufbau ------------------------------------------------------------
@@ -124,12 +129,20 @@ class ChatService:
             # 1) Konversation + Nutzernachricht (eigene Transaktion; commit
             #    vor der Recherche, damit deren DB-Writes nicht auf den
             #    offenen Schreib-Lock dieser Session treffen (SQLite/WAL)).
-            with self._db.session() as session:
-                conversation_id = self._ensure_conversation(session, request)
-                user_model = self._conversations.add_message(
-                    session, conversation_id, "user", request.message
-                )
-                user_id = user_model.id
+            def _persist_user() -> tuple[str, str, MessageOut]:
+                with self._db.session() as session:
+                    conversation_id = self._ensure_conversation(session, request)
+                    user_model = self._conversations.add_message(
+                        session, conversation_id, "user", request.message
+                    )
+                    return (
+                        conversation_id,
+                        user_model.id,
+                        MessageOut.model_validate(user_model),
+                    )
+
+            # Sync-DB nie im Event-Loop (Cloud: Blockaden → Instanz-Restarts).
+            conversation_id, user_id, user_out = await asyncio.to_thread(_persist_user)
 
             # 2) Kontextaufbau (nur Lesezugriffe) + optionale Recherche:
             prepared: Any = None
@@ -165,23 +178,27 @@ class ChatService:
                     log.info("Zitat-Validierung: %d Marker korrigiert.", len(warnings))
 
             # 4) Antwort persistieren + Gedächtnis-Vormerkung:
-            with self._db.session() as session:
-                assistant_model = self._conversations.add_message(
-                    session, conversation_id, "assistant", content
-                )
-                if self._core is not None:
-                    self._core.finalize_turn(
-                        session,
-                        conversation_id=conversation_id,
-                        user_text=request.message,
-                        assistant_text=content,
-                        used_memory_ids=prepared.used_memory_ids if prepared else [],
+            def _persist_assistant() -> MessageOut:
+                with self._db.session() as session:
+                    assistant_model = self._conversations.add_message(
+                        session, conversation_id, "assistant", content
                     )
-                return ChatTurn(
-                    conversation_id=conversation_id,
-                    user_message=MessageOut.model_validate(user_model),
-                    assistant_message=MessageOut.model_validate(assistant_model),
-                )
+                    if self._core is not None:
+                        self._core.finalize_turn(
+                            session,
+                            conversation_id=conversation_id,
+                            user_text=request.message,
+                            assistant_text=content,
+                            used_memory_ids=prepared.used_memory_ids if prepared else [],
+                        )
+                    return MessageOut.model_validate(assistant_model)
+
+            assistant_out = await asyncio.to_thread(_persist_assistant)
+            return ChatTurn(
+                conversation_id=conversation_id,
+                user_message=user_out,
+                assistant_message=assistant_out,
+            )
 
         return await _run()
 
@@ -214,12 +231,16 @@ class ChatService:
                 # 1) Konversation + Nutzernachricht (eigene Transaktion, commit
                 #    vor der Recherche – verhindert SQLite-Schreibkonflikte mit
                 #    den eigenen Sessions der Recherche-Engine).
-                with self._db.session() as session:
-                    conversation_id = self._ensure_conversation(session, request)
-                    user_model = self._conversations.add_message(
-                        session, conversation_id, "user", request.message
-                    )
-                    user_id = user_model.id
+                def _persist_user_turn() -> tuple[str, str]:
+                    with self._db.session() as session:
+                        conversation_id = self._ensure_conversation(session, request)
+                        user_model = self._conversations.add_message(
+                            session, conversation_id, "user", request.message
+                        )
+                        return conversation_id, user_model.id
+
+                # Sync-DB nie im Event-Loop (Cloud: Blockaden → Instanz-Restarts).
+                conversation_id, user_id = await asyncio.to_thread(_persist_user_turn)
 
                 await queue.put(self._sse("start", {
                     "conversation_id": conversation_id,
@@ -276,19 +297,22 @@ class ChatService:
                         prepared.research_report, warnings
                     )
 
-                with self._db.session() as session:
-                    assistant_model = self._conversations.add_message(
-                        session, conversation_id, "assistant", content
-                    )
-                    assistant_id = assistant_model.id
-                    if self._core is not None:
-                        self._core.finalize_turn(
-                            session,
-                            conversation_id=conversation_id,
-                            user_text=request.message,
-                            assistant_text=content,
-                            used_memory_ids=used_memory_ids,
+                def _persist_assistant_turn() -> str | None:
+                    with self._db.session() as session:
+                        assistant_model = self._conversations.add_message(
+                            session, conversation_id, "assistant", content
                         )
+                        if self._core is not None:
+                            self._core.finalize_turn(
+                                session,
+                                conversation_id=conversation_id,
+                                user_text=request.message,
+                                assistant_text=content,
+                                used_memory_ids=used_memory_ids,
+                            )
+                        return assistant_model.id
+
+                assistant_id = await asyncio.to_thread(_persist_assistant_turn)
 
                 done_payload: dict[str, Any] = {
                     "conversation_id": conversation_id,
@@ -304,10 +328,14 @@ class ChatService:
                 partial = "".join(collected)
                 if partial and conversation_id:
                     try:
-                        with self._db.session() as session:
-                            self._conversations.add_message(
-                                session, conversation_id, "assistant", partial
-                            )
+
+                        def _persist_partial() -> None:
+                            with self._db.session() as session:
+                                self._conversations.add_message(
+                                    session, conversation_id, "assistant", partial
+                                )
+
+                        await asyncio.to_thread(_persist_partial)
                     except Exception:  # noqa: BLE001
                         log.exception("Teilantwort konnte nicht gespeichert werden.")
                 await queue.put(self._sse("error", {

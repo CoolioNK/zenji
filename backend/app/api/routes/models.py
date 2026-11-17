@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -24,8 +25,13 @@ async def list_models(request: Request) -> dict[str, Any]:
     provider_status = await provider.status()
     active_model = None
     try:
-        with database.session() as session:
-            active_model = settings_service.effective(session).llm.model
+
+        def _active_model() -> str | None:
+            with database.session() as session:
+                return settings_service.effective(session).llm.model
+
+        # Sync-DB nie im Event-Loop (Cloud: Blockaden → Instanz-Restarts).
+        active_model = await asyncio.to_thread(_active_model)
     except Exception:  # noqa: BLE001 – ohne DB: Bootstrap-Default anzeigen
         active_model = settings_service.defaults().llm.model
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -9,8 +10,26 @@ from fastapi import APIRouter, Request
 
 from app import __version__
 from app.api import deps
+from app.database.database import Database
 
 router = APIRouter(tags=["health"])
+
+#: DB-Check wird kurz gecacht – Render pings /api/health regelmäßig, und auf
+#: dem Free-Tier (0.1 CPU, langsamer Supabase-Pooler) kostet jeder echte
+#: DB-Check mehrere Sekunden. Ohne Cache friert der Event-Loop bei jedem Ping.
+_DB_CACHE_TTL = 30.0
+_db_cache: dict[str, Any] = {"checked_at": 0.0, "ok": False}
+
+
+def _database_ready_cached(database: Database) -> bool:
+    """``database.is_ready()`` mit kurzer Cache-TTL (pro Prozess)."""
+    now = time.monotonic()
+    if now - _db_cache["checked_at"] < _DB_CACHE_TTL:
+        return bool(_db_cache["ok"])
+    ok = database.is_ready()
+    _db_cache["checked_at"] = now
+    _db_cache["ok"] = ok
+    return ok
 
 
 @router.get("/health", summary="Status von Backend, SSD, Datenbank, Ollama und Modell")
@@ -39,7 +58,9 @@ async def health(request: Request) -> dict[str, Any]:
             "message": storage_status.message,
         }
 
-    database_ok = database.is_ready()
+    # Sync-DB-Aufrufe **nie** im Event-Loop ausführen (Cloud: sekundenlange
+    # Blockaden → Render stuft die Instanz als ungesund ein und startet sie).
+    database_ok = await asyncio.to_thread(_database_ready_cached, database)
     database_message = (
         "Datenbank verbunden." if database_ok else "Datenbank nicht erreichbar."
     )
@@ -55,9 +76,12 @@ async def health(request: Request) -> dict[str, Any]:
     model_status: dict[str, Any] = {"model": None, "available": False, "message": ""}
     if provider_status.available:
         try:
-            with database.session() as session:
-                effective = settings_service.effective(session)
-            model = effective.llm.model
+
+            def _effective_model() -> str | None:
+                with database.session() as session:
+                    return settings_service.effective(session).llm.model
+
+            model = await asyncio.to_thread(_effective_model)
             status = await engine.model_manager.status_for(model)
             model_status = {
                 "model": status.model,
