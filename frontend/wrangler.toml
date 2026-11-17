@@ -6,3 +6,9 @@ name = "zenji"
 pages_build_output_dir = "dist"
 compatibility_date = "2026-11-01"
 compatibility_flags = ["nodejs_compat"]
+
+# Env-Vars für die Pages-Function (functions/api/[[path]].ts — optionaler
+# API-Proxy). Das Frontend ruft das Backend direkt an; der Proxy ist Fallback.
+[vars]
+API_ORIGIN = "https://zenji-api.onrender.com"
+ALLOWED_ORIGIN = "https://zenji-chm.pages.dev"
