@@ -1,5 +1,5 @@
 # Cloudflare Pages – statisches ZENJI-Frontend.
-# Das Backend läuft separat (FastAPI). Siehe DEPLOY_CLOUDFLARE.md im Repo-Root.
+# Backend läuft separat auf Render (Free-Plan). Siehe DEPLOY_KOSTENLOS.md im Repo-Root.
 # Build command und output directory können auch im Pages-Dashboard gesetzt werden.
 
 name = "zenji"
