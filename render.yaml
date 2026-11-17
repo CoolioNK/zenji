@@ -32,7 +32,7 @@ services:
         sync: false
       # --- CORS / Frontend-Origin ---
       - key: ZENJI_PUBLIC_BASE_URL
-        value: https://zenji.pages.dev
+        value: https://zenji-chm.pages.dev
       - key: ZENJI_CORS_ORIGINS
         value: http://localhost:5173
       # --- Logging (Render-Dateisystem ist ephemeral; Konsole reicht) ---

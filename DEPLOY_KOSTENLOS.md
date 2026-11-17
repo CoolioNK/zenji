@@ -51,14 +51,14 @@ npx wrangler pages deploy dist --project-name zenji
 ```
 
 `VITE_*`-Werte werden beim Build eingebacken; nach jedem Backend-URL-Wechsel
-neu bauen und deployen. Ziel: `https://zenji.pages.dev`
+neu bauen und deployen. Ziel: `https://zenji-chm.pages.dev`
 
 ## Schritt 3 — Supabase-Redirects
 
 Dashboard → Authentication → URL Configuration:
 
-- Site URL: `https://zenji.pages.dev`
-- Redirect URLs: `https://zenji.pages.dev/**`
+- Site URL: `https://zenji-chm.pages.dev`
+- Redirect URLs: `https://zenji-chm.pages.dev/**`
 
 ## Schritt 4 — Wachhalten (UptimeRobot, 2 Klicks)
 
