@@ -1,0 +1,9 @@
+# Keep-alive-Cron für das Render-Free-Backend (siehe src/index.ts).
+name = "zenji-keepalive"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+account_id = "c3ef2e014cfb2909b5f2af363de772b3"
+
+# Alle 5 Minuten pingen → Render schläft nie ein (750 h/Monat reichen).
+[triggers]
+crons = ["*/5 * * * *"]

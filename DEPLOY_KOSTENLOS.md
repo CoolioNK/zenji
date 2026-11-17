@@ -66,18 +66,25 @@ Dashboard → Authentication → URL Configuration:
 - Site URL: `https://zenji-chm.pages.dev`
 - Redirect URLs: `https://zenji-chm.pages.dev/**`
 
-## Schritt 4 — Wachhalten (UptimeRobot, 2 Klicks)
+## Schritt 4 — Wachhalten (Cloudflare-Cron-Worker, bereits deployt)
 
-1. https://uptimerobot.com → kostenlosen Account anlegen
-2. **Add New Monitor** → HTTP(s) → Name `zenji-api` →
-   URL `https://zenji-api.onrender.com/api/health` → Intervall 5 min
+Das Repo enthält `workers/keepalive/`: ein kostenloser Cloudflare-Worker mit
+Cron-Trigger (`*/5 * * * *`), der `/api/health` pingt und das Backend dadurch
+dauerhaft wach hält (~744 h/Monat < 750 h Free-Kontingent). UptimeRobot wird
+damit **nicht** benötigt.
+
+Manuelles (Re-)Deploy, falls nötig:
+
+    cd workers/keepalive && npx wrangler deploy
 
 Damit schläft das Backend nie ein und antwortet sofort.
 
 ## Verhalten & Grenzen (ehrlich)
 
-- **Kaltstart:** Ohne Ping-Dienst dauert die erste Anfrage nach 15+ Minuten
-  Pause ~1 Minute (Render zeigt eine Ladeseite).
+- **Kaltstart:** Nur wenn der Keep-alive-Worker nicht läuft — der erste
+  Request nach 15+ Minuten Pause kann scheitern (Render-Edge antwortet
+  während des Aufwachens mit 502/404, was im Browser als „Load failed"
+  ankommt); erneuter Versuch nach ~1 Minute klappt.
 - **Ephemerales Dateisystem:** Render verliert lokale Dateien bei Redeploys —
   irrelevant, da alle Daten in Supabase liegen (Cloud-Speicher-Modus).
 - **Deploy:** Jeder `git push` auf GitHub triggert automatisch einen neuen
