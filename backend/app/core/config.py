@@ -23,6 +23,7 @@ Pfad-Logik (keine hart codierten absoluten Pfade im Anwendungscode):
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator
@@ -31,11 +32,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_SSD_ROOT = "/Volumes/ZENJI-SSD"
 
 DEFAULT_PERSONA = """\
-Du bist ZENJI – kein Standard-Assistent, sondern ein eigenständiges Gegenüber auf Augenhöhe: \
-nah dran, unverbissen, mit eigener Meinung und trockenem Humor.
+Du bist Zenji Ango – ein freundlicher, aufmerksamer Assistent auf Augenhöhe: \
+nah dran, klar, hilfreich und mit dezentem Humor.
 
 Verhaltensrichtlinien:
-- Sprich wie unter Freunden: natürlich, direkt, ohne Corporate-Floskeln und Dienerischkeits-Einleitungen.
+- Antworte freundlich, natürlich und hilfreich, wie ein guter Assistent.
+- Sei direkt und ehrlich, aber ohne Beleidigungen, Seitenhiebe oder unnötige Provokationen.
 - Wenn du etwas nicht sicher weißt, sage es offen, statt zu spekulieren.
 - Frage nach, wenn eine Aufgabe mehrdeutig ist, statt eine falsche Annahme zu treffen.
 - Berücksichtige den Verlauf der aktuellen Konversation.
@@ -46,7 +48,7 @@ Verhaltensrichtlinien:
 #: Standard-Persona-Prompt **nur**, wenn er exakt diesem Text entspricht –
 #: individuell angepasste Nutzertexte werden respektiert.
 LEGACY_PERSONA = """\
-Du bist ZENJI, ein eigenständiges KI-System mit ruhigem, klarem und präzisem Sprachstil.
+Du bist Zenji Ango, ein eigenständiges KI-System mit ruhigem, klarem und präzisem Sprachstil.
 
 Verhaltensrichtlinien:
 - Antworte sachlich, strukturiert und ohne Füllwörter.
@@ -83,6 +85,20 @@ class OllamaDefaults(BaseModel):
     strip_think: bool = True
 
 
+class CloudflareDefaults(BaseModel):
+    """Provider-spezifische Parameter für Cloudflare Workers AI.
+
+    Konto-ID und API-Token liegen als eigene ``Settings``-Felder
+    (``cloudflare_account_id`` / ``cloudflare_api_token``), damit sie wie
+    ``ollama_base_url`` flach per Umgebungsvariable gesetzt werden können.
+    """
+
+    timeout: float = Field(default=120.0, ge=1.0, le=3600.0)
+    connect_timeout: float = Field(default=5.0, ge=0.5, le=60.0)
+    # Manche Modelle mischen Reasoning-Ausgaben in den Text – defensiv filtern.
+    strip_think: bool = True
+
+
 class Settings(BaseSettings):
     """Bootstrap-Konfiguration von ZENJI (Umgebung + .env)."""
 
@@ -106,6 +122,9 @@ class Settings(BaseSettings):
 
     # --- Allgemeine ZENJI-Parameter -----------------------------------------
     cors_origins: str = "http://localhost:5173"
+    #: Öffentliche Origin des Frontends (z. B. https://zenji.pages.dev).
+    #: Wird zusätzlich zu ``cors_origins`` erlaubt.
+    public_base_url: str = ""
 
     # --- LLM ----------------------------------------------------------------
     llm: LLMDefaults = Field(default_factory=LLMDefaults)
@@ -113,6 +132,27 @@ class Settings(BaseSettings):
     # --- Provider-spezifisch: Ollama ----------------------------------------
     ollama_base_url: str = "http://localhost:11434"
     ollama: OllamaDefaults = Field(default_factory=OllamaDefaults)
+
+    # --- Provider-spezifisch: Cloudflare Workers AI --------------------------
+    #: Cloudflare-Konto-ID (Dashboard → Übersicht → „Account ID").
+    cloudflare_account_id: str = ""
+    #: API-Token mit Workers-AI-Run-Berechtigung (My Profile → API Tokens).
+    cloudflare_api_token: str = ""
+    cloudflare: CloudflareDefaults = Field(default_factory=CloudflareDefaults)
+
+    # --- Supabase (Accounts + Cloud-Speicher) --------------------------------
+    # Ohne diese Werte läuft ZENJI im lokalen Modus (SQLite, Single-User).
+    # Mit Werten läuft ZENJI ausschließlich gegen Supabase: Accounts über
+    # Supabase Auth, alle Nutzerdaten in Supabase Postgres (RLS pro Nutzer).
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_service_role_key: str = ""
+    #: Direkte Postgres-Verbindung (Supabase Dashboard → Connect).
+    #: Beispiel: postgresql://postgres.<ref>:<pass>@aws-0-<region>.pooler.supabase.com:5432/postgres
+    supabase_db_url: str = ""
+    #: JWT Secret (Supabase Dashboard → Settings → API). Optional, falls nur
+    #: die Auth-API zur Verifikation genutzt wird.
+    supabase_jwt_secret: str = ""
 
     # --- Persönlichkeit ------------------------------------------------------
     persona_system_prompt: str = DEFAULT_PERSONA
@@ -142,7 +182,19 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        values = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        if self.public_base_url:
+            values.append(self.public_base_url.rstrip("/"))
+        return list(dict.fromkeys(values))
+
+    @property
+    def supabase_enabled(self) -> bool:
+        """True, sobald URL, Anon-Key und direkte DB-URL gesetzt sind."""
+        return bool(self.supabase_url and self.supabase_anon_key and self.supabase_db_url)
+
+    @property
+    def supabase_rest_url(self) -> str:
+        return self.supabase_url.rstrip("/")
 
     # --- Validierung -----------------------------------------------------------
     @field_validator("log_level")
@@ -160,6 +212,30 @@ class Settings(BaseSettings):
         value = value.rstrip("/")
         if not value.startswith(("http://", "https://")):
             raise ValueError("ollama_base_url muss mit http:// oder https:// beginnen")
+        return value
+
+    @field_validator("cloudflare_account_id")
+    @classmethod
+    def _validate_cloudflare_account_id(cls, value: str) -> str:
+        value = value.strip()
+        if value and not re.fullmatch(r"[0-9a-fA-F]{32}", value):
+            raise ValueError(
+                "cloudflare_account_id muss eine 32-stellige hexadezimale "
+                "Cloudflare-Konto-ID sein (Dashboard → Übersicht → Account ID)"
+            )
+        return value.lower()
+
+    @field_validator("cloudflare_api_token")
+    @classmethod
+    def _validate_cloudflare_api_token(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("public_base_url")
+    @classmethod
+    def _validate_public_base_url(cls, value: str) -> str:
+        value = value.rstrip("/")
+        if value and not value.startswith(("http://", "https://")):
+            raise ValueError("public_base_url muss mit http:// oder https:// beginnen")
         return value
 
     @classmethod

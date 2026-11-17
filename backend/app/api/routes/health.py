@@ -22,13 +22,33 @@ async def health(request: Request) -> dict[str, Any]:
     database = deps.get_database(request)
     engine = deps.get_llm_engine(request)
     settings_service = deps.get_settings_service(request)
+    settings = deps.get_settings(request)
+    supabase_mode = settings.supabase_enabled
 
     storage_status = storage.status()
+    if supabase_mode:
+        storage_block = {
+            "available": True,
+            "root": "supabase",
+            "message": "Cloud-Speicher (Supabase).",
+        }
+    else:
+        storage_block = {
+            "available": storage_status.available,
+            "root": storage_status.root,
+            "message": storage_status.message,
+        }
 
     database_ok = database.is_ready()
     database_message = (
         "Datenbank verbunden." if database_ok else "Datenbank nicht erreichbar."
     )
+    try:
+        database_path = (
+            "supabase" if database.engine.dialect.name == "postgresql" else str(database.db_path)
+        )
+    except Exception:  # noqa: BLE001 – Statusabfrage darf nicht crashen
+        database_path = "unbekannt"
 
     provider_status = await engine.provider_status()
     model = None
@@ -49,21 +69,19 @@ async def health(request: Request) -> dict[str, Any]:
                 f"Modellstatus nicht ermittelbar: {exc.__class__.__name__}"
             )
 
-    degraded = not (storage_status.available and database_ok and provider_status.available)
+    storage_ok = storage_block["available"] or supabase_mode
+    degraded = not (storage_ok and database_ok and provider_status.available)
     elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
 
     return {
         "status": "degraded" if degraded else "ok",
         "version": __version__,
         "time_ms": elapsed_ms,
-        "storage": {
-            "available": storage_status.available,
-            "root": storage_status.root,
-            "message": storage_status.message,
-        },
+        "supabase": settings.supabase_enabled,
+        "storage": storage_block,
         "database": {
             "ok": database_ok,
-            "path": str(database.db_path),
+            "path": database_path,
             "message": database_message,
         },
         "ollama": {
@@ -73,6 +91,8 @@ async def health(request: Request) -> dict[str, Any]:
             if hasattr(engine.provider, "_base_url")
             else None,
             "message": provider_status.detail or "",
+            # Tatsächlicher aktiver Provider (z. B. "ollama" oder "cloudflare").
+            "provider": engine.provider.name,
         },
         "model": model_status,
     }

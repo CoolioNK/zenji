@@ -2,9 +2,10 @@
 
 Neue Anbieter werden hier registriert und in der Konfiguration über
 ``ZENJI_LLM_PROVIDER`` (bzw. ``llm.provider`` in der Laufzeitkonfiguration)
-ausgewählt.  ZENJI enthält in Phase 1 genau einen Provider (Ollama); das
-Registrierungsmuster ist für Phase 2+ (llama.cpp, OpenAI-kompatible APIs,
-Image-Provider) vorbereitet.
+ausgewählt.  ZENJI enthält die Provider Ollama (lokal) und Cloudflare
+Workers AI (Cloud, Free-Plan möglich); das Registrierungsmuster ist für
+weitere Anbieter (llama.cpp, OpenAI-kompatible APIs, Image-Provider)
+vorbereitet.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from typing import Callable, TypeAlias
 
 from app.core.exceptions import ConfigurationError
 from app.engines.providers.base import LLMProvider
+from app.engines.providers.cloudflare import CloudflareProvider
 from app.engines.providers.ollama import OllamaProvider
 
 ProviderFactory: TypeAlias = Callable[[str, dict], LLMProvider]
@@ -42,7 +44,7 @@ def available_providers() -> list[str]:
 
 
 def _default_registry() -> None:
-    from app.core.config import OllamaDefaults
+    from app.core.config import CloudflareDefaults, OllamaDefaults
 
     def ollama_factory(config: dict) -> OllamaProvider:
         return OllamaProvider(
@@ -50,7 +52,18 @@ def _default_registry() -> None:
             config=OllamaDefaults(**{k: v for k, v in config.items() if k != "base_url"}),
         )
 
+    def cloudflare_factory(config: dict) -> CloudflareProvider:
+        credential_keys = {"account_id", "api_token"}
+        return CloudflareProvider(
+            account_id=config.get("account_id", ""),
+            api_token=config.get("api_token", ""),
+            config=CloudflareDefaults(
+                **{k: v for k, v in config.items() if k not in credential_keys}
+            ),
+        )
+
     register_provider(OllamaProvider.name, ollama_factory)
+    register_provider(CloudflareProvider.name, cloudflare_factory)
 
 
 _default_registry()

@@ -3,16 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, openChatStream, ApiError } from "../services/api";
 import { streamSSE } from "../services/sse";
-import type { ChatError, ChatResearchSummary, CommunicationModeKey, Message, ResearchMode } from "../types";
+import type {
+  ChatError,
+  ChatResearchSummary,
+  CommunicationModeKey,
+  Message,
+  ResearchMode,
+  ResearchProgressEvent,
+} from "../types";
 
 export type ChatStatus = "idle" | "loading-history" | "streaming";
-
-/** Echtes Recherche-Statusereignis aus dem SSE-Stream (keine erfundenen Fortschritte). */
-export interface ResearchProgressEvent {
-  step: string;
-  detail: string;
-  [key: string]: unknown;
-}
 
 export interface ChatState {
   messages: Message[];
@@ -20,10 +20,6 @@ export interface ChatState {
   error: ChatError | null;
   send: (text: string, mode?: CommunicationModeKey | null, research?: ResearchMode) => Promise<void>;
   stop: () => void;
-  /** Live-Recherche-Ereignisse des laufenden/letzten Streams. */
-  researchEvents: ResearchProgressEvent[];
-  /** Zusammenfassung der letzten Recherche (aus dem done-Event). */
-  researchSummary: ChatResearchSummary | null;
 }
 
 export function useChat(
@@ -33,8 +29,6 @@ export function useChat(
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<ChatStatus>("idle");
   const [error, setError] = useState<ChatError | null>(null);
-  const [researchEvents, setResearchEvents] = useState<ResearchProgressEvent[]>([]);
-  const [researchSummary, setResearchSummary] = useState<ChatResearchSummary | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   /* Läuft gerade ein Senden, darf der Verlauflader die lokalen
      Nachrichten nicht löschen (Sonst-Race: conversation_id wechselt
@@ -48,8 +42,6 @@ export function useChat(
 
     setError(null);
     setMessages([]);
-    setResearchEvents([]);
-    setResearchSummary(null);
 
     if (conversationId === null) {
       setStatus("idle");
@@ -85,8 +77,6 @@ export function useChat(
       const trimmed = text.trim();
       if (!trimmed || status === "streaming") return;
       setError(null);
-      setResearchEvents([]);
-      setResearchSummary(null);
 
       /* Optimistische Nutzernachricht (Wird durch Server-Objekt ersetzt). */
       const localUser: Message = {
@@ -146,13 +136,26 @@ export function useChat(
               onConversationCreated(createdConversationId);
             }
           } else if (sse.event === "research") {
-            /* Echtes Recherche-Ereignis (Suche, Abruf, Vergleich …). */
-            setResearchEvents((prev) => [...prev, sse.data as ResearchProgressEvent]);
+            /* Echtes Recherche-Ereignis direkt an die laufende Assistant-Antwort hängen. */
+            const researchEvent = sse.data as ResearchProgressEvent;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === streamingId
+                  ? { ...m, researchEvents: [...(m.researchEvents ?? []), researchEvent] }
+                  : m,
+              ),
+            );
           } else if (sse.event === "delta") {
             appendTo(streamingId, (sse.data.content as string) ?? "");
           } else if (sse.event === "done") {
             const summary = (sse.data.research as ChatResearchSummary | undefined) ?? null;
-            if (summary) setResearchSummary(summary);
+            if (summary) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === streamingId ? { ...m, researchSummary: summary } : m,
+                ),
+              );
+            }
             finalize(
               streamingId,
               (sse.data.assistant_message_id as string) ?? null,
@@ -208,7 +211,7 @@ export function useChat(
     [conversationId, onConversationCreated, status],
   );
 
-  return { messages, status, error, send, stop, researchEvents, researchSummary };
+  return { messages, status, error, send, stop };
 }
 
 class StreamedError extends Error {

@@ -41,15 +41,15 @@ def test_fresh_database_erhaelt_tabellen_und_seeds(tmp_path):
         assert len(active) == 1
         assert active[0].name == "Zenji"
         assert active[0].is_system is True
-        # Spezifikationswerte der Begleiter-Persönlichkeit (0–1):
-        assert active[0].humor == 0.9
-        assert active[0].sarcasm == 0.65
-        assert active[0].cheekiness == 0.75
-        assert active[0].directness == 0.95
-        assert active[0].friendliness == 0.9
+        # Werte der freundlichen Begleiter-Persönlichkeit (0–1):
+        assert active[0].humor == 0.45
+        assert active[0].sarcasm == 0.1
+        assert active[0].cheekiness == 0.15
+        assert active[0].directness == 0.7
+        assert active[0].friendliness == 0.95
         assert active[0].empathy == 0.85
-        assert active[0].curiosity == 0.9
-        assert active[0].initiative == 0.85
+        assert active[0].curiosity == 0.85
+        assert active[0].initiative == 0.7
 
         rules = list(session.scalars(select(PolicyModel)))
         assert len(rules) == 9
@@ -122,7 +122,8 @@ def test_migration_3_zu_4_aktualisiert_regeln(tmp_path):
         assert banter.priority == 94
         freedom = session.get(PolicyModel, "communication_freedom")
         assert freedom is not None
-        assert "Hurensohn" in freedom.instruction
+        assert "freundlich" in freedom.instruction
+        assert "keine Beleidigungen" in freedom.instruction
         assert len(list(session.scalars(select(PolicyModel)))) == 9
 
 

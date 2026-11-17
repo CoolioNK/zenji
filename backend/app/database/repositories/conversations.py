@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from app.core.context import get_current_user_id
 from app.database.models import ConversationModel, MessageModel, touch
 
 
@@ -23,7 +24,10 @@ class ConversationRepository:
         return session.get(ConversationModel, conversation_id)
 
     def create(self, session: Session, title: str) -> ConversationModel:
-        conversation = ConversationModel(title=title.strip() or "Neue Konversation")
+        conversation = ConversationModel(
+            title=title.strip() or "Neue Konversation",
+            user_id=get_current_user_id(),
+        )
         session.add(conversation)
         session.flush()
         return conversation

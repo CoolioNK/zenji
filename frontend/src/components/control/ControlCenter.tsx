@@ -1,5 +1,4 @@
-/* ZENJI Control Center – rechte Schublade mit fünf Bereichen.
-   Bereiche: Personality · Policies · Memory · Core Status · Web (v0.5.0). */
+/* ZENJI Control Center – rechte Schublade im Zenji Editorial Design-System */
 
 import { useState } from "react";
 import { PersonalityTab } from "./PersonalityTab";
@@ -7,6 +6,7 @@ import { PoliciesTab } from "./PoliciesTab";
 import { MemoryTab } from "./MemoryTab";
 import { CoreTab } from "./CoreTab";
 import { WebIntelligenceTab } from "./WebIntelligenceTab";
+import { X } from "lucide-react";
 
 export type ControlTab = "personality" | "policies" | "memory" | "core" | "web";
 
@@ -32,27 +32,27 @@ export function ControlCenter({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 z-20 flex w-[600px] flex-col border-l border-ink-700 bg-ink-850 shadow-2xl">
-      <div className="flex items-center justify-between border-b border-ink-700 px-5 py-4">
+    <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-[620px] flex-col border-l border-border bg-card shadow-2xl backdrop-blur-2xl animate-fade-up">
+      <div className="flex items-center justify-between border-b border-border px-6 py-4 bg-background/60">
         <div>
-          <h2 className="text-[14px] font-semibold tracking-wide text-ink-50">
+          <h2 className="text-base font-semibold tracking-wide text-foreground">
             ZENJI Control Center
           </h2>
-          <p className="mt-0.5 text-[11px] text-ink-400">
+          <p className="mt-0.5 text-xs text-muted-foreground font-mono">
             Identität, Regeln, Gedächtnis und Kontext steuern
           </p>
         </div>
         <button
           onClick={onClose}
-          className="rounded-md px-2 py-1 text-[13px] text-ink-300 hover:bg-ink-800 hover:text-ink-50"
+          className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:border-accent transition-colors"
           aria-label="Control Center schließen"
         >
-          ✕
+          <X className="h-4 w-4" />
         </button>
       </div>
 
       <div
-        className="flex gap-1 border-b border-ink-700 px-4 py-2"
+        className="flex gap-2 border-b border-border px-6 py-2.5 bg-background/40"
         role="tablist"
         aria-label="Control Center Bereiche"
       >
@@ -62,10 +62,10 @@ export function ControlCenter({
             role="tab"
             aria-selected={tab === entry.key}
             onClick={() => setTab(entry.key)}
-            className={`rounded-lg px-3 py-1.5 text-[12.5px] transition-colors ${
+            className={`rounded-full px-3.5 py-1.5 font-mono text-xs transition-colors ${
               tab === entry.key
-                ? "bg-ink-800 text-ink-50"
-                : "text-ink-400 hover:bg-ink-800/60 hover:text-ink-200"
+                ? "bg-primary text-primary-foreground font-medium shadow-sm"
+                : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"
             }`}
           >
             {entry.label}
@@ -73,7 +73,7 @@ export function ControlCenter({
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-5">
+      <div className="flex-1 overflow-y-auto px-6 py-6">
         {tab === "personality" && <PersonalityTab />}
         {tab === "policies" && <PoliciesTab />}
         {tab === "memory" && <MemoryTab />}

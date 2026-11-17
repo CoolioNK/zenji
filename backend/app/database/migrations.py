@@ -43,6 +43,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.core.config import DEFAULT_PERSONA, LEGACY_PERSONA
+from app.core.context import get_current_user_id, scope_entity_id, scope_key
 from app.core.logging import get_logger
 from app.database.models import (
     MEMORY_TYPES,
@@ -70,7 +71,7 @@ PERSONALITIES_FILE = CONFIG_DIR / "personalities.json"
 POLICIES_FILE = CONFIG_DIR / "system_policies.json"
 
 #: Aktuelle Schema-Stufe. Erhöhen, wenn eine neue Migration hinzukommt.
-LATEST_VERSION = 5
+LATEST_VERSION = 6
 
 # --- Migrationsstufen --------------------------------------------------------
 
@@ -139,11 +140,44 @@ def _migrate_4_to_5(session: Session) -> None:
     return None
 
 
+def _migrate_5_to_6(session: Session) -> None:
+    """5 → 6: Nutzer-Zuordnung (``user_id``) für alle Datentabellen.
+
+    In Supabase wird das Schema frisch erzeugt (die Spalte ist bereits Teil
+    von ``create_all``); diese Migration betrifft bestehende lokale
+    SQLite-Datenbanken.  ``ALTER TABLE … ADD COLUMN`` ist idempotent.
+    """
+    tables = (
+        "conversations",
+        "messages",
+        "settings",
+        "personalities",
+        "policies",
+        "memories",
+        "research_sessions",
+        "search_queries",
+        "search_results",
+        "sources",
+        "source_snapshots",
+        "citations",
+        "research_cache",
+    )
+    for table in tables:
+        columns = {
+            row[1] for row in session.execute(text(f"PRAGMA table_info({table})")).fetchall()
+        }
+        if "user_id" in columns:
+            continue
+        session.execute(text(f'ALTER TABLE "{table}" ADD COLUMN user_id VARCHAR(32)'))
+        log.info("Migration 5→6: Spalte user_id zu '%s' hinzugefügt.", table)
+
+
 MIGRATIONS: dict[int, Callable[[Session], None]] = {
     2: _migrate_1_to_2,
     3: _migrate_2_to_3,
     4: _migrate_3_to_4,
     5: _migrate_4_to_5,
+    6: _migrate_5_to_6,
 }
 
 
@@ -154,7 +188,10 @@ def current_version(engine: Engine) -> int:
     """Angewendete Migrationsstufe (0 = vor Phase 2, ohne Metadaten)."""
     with engine.connect() as conn:
         try:
-            row = conn.execute(text("PRAGMA user_version")).scalar()
+            if engine.dialect.name == "postgresql":
+                row = conn.execute(text("SELECT version FROM schema_version WHERE id = 1")).scalar()
+            else:
+                row = conn.execute(text("PRAGMA user_version")).scalar()
             return int(row or 0)
         except Exception:  # noqa: BLE001 – Statusabfrage darf nicht crashen
             return 0
@@ -166,7 +203,17 @@ def run_migrations(engine: Engine) -> int:
     ``create_all`` ist bereits vor dem Aufruf gelaufen (neue Tabellen existieren
     also schon); die Stufen kümmern sich um Datenmigration und Seeding.
     Rückgabe: erreichte Stufe.
+
+    Auf Supabase/Postgres werden keine globalen Migrationen ausgeführt: Das
+    Schema wird von ``create_all`` + RLS erzeugt, und Defaults werden pro Nutzer
+    beim ersten Login geseedet (``app.core.auth``).
     """
+    if engine.dialect.name == "postgresql":
+        with Session(engine) as session:
+            _set_version(session, LATEST_VERSION)
+            session.commit()
+        return LATEST_VERSION
+
     version = current_version(engine)
     if version >= LATEST_VERSION:
         return version
@@ -185,8 +232,9 @@ def run_migrations(engine: Engine) -> int:
 
 
 def _set_version(session: Session, version: int) -> None:
-    """Setzt ``PRAGMA user_version`` UND die Metadaten-Tabelle (doppelt festgehalten)."""
-    session.execute(text(f"PRAGMA user_version = {int(version)}"))
+    """Setzt ``PRAGMA user_version`` (SQLite) UND die Metadaten-Tabelle."""
+    if session.get_bind().dialect.name != "postgresql":
+        session.execute(text(f"PRAGMA user_version = {int(version)}"))
     row = session.get(SchemaVersionModel, 1)
     if row is None:
         session.add(SchemaVersionModel(id=1, version=version))
@@ -215,6 +263,7 @@ def _seed_personalities(session: Session, *, force_inactive: bool = False) -> No
             continue
         profile = PersonalityModel(
             id=new_id(),
+            user_id=get_current_user_id(),
             name=name,
             identity=str(entry.get("identity", "")),
             base_personality=_pick(entry.get("base_personality"), PERSONALITY_BASES, "neutral"),
@@ -255,11 +304,13 @@ def _seed_policies(session: Session) -> None:
     created = 0
     for entry in rules:
         policy_id = str(entry.get("id", "")).strip()
-        if not policy_id or policy_id in existing:
+        scoped_id = scope_entity_id(policy_id) if policy_id else ""
+        if not policy_id or scoped_id in existing:
             continue
         session.add(
             PolicyModel(
-                id=policy_id,
+                id=scoped_id,
+                user_id=get_current_user_id(),
                 name=str(entry.get("name", policy_id)),
                 instruction=str(entry.get("instruction", "")),
                 priority=max(0, min(100, int(entry.get("priority", 50)))),
@@ -269,7 +320,7 @@ def _seed_policies(session: Session) -> None:
                 source=_pick(entry.get("source"), POLICY_SOURCES, "user"),
             )
         )
-        existing.add(policy_id)
+        existing.add(scoped_id)
         created += 1
     if created:
         session.flush()
@@ -325,7 +376,7 @@ def _refresh_system_rule_texts(session: Session) -> None:
         policy_id = str(entry.get("id", "")).strip()
         if not policy_id:
             continue
-        policy = session.get(PolicyModel, policy_id)
+        policy = session.get(PolicyModel, scope_entity_id(policy_id))
         if policy is None or policy.source != "system":
             continue
         changed = False
@@ -419,7 +470,7 @@ def _refresh_default_persona(session: Session) -> None:
     angepassten Persona-Prompt überschreibt die Migration niemals.  Ohne
     gespeicherte Einstellung greift automatisch der neue Bootstrap-Default.
     """
-    stored = session.get(SettingModel, "persona")
+    stored = session.get(SettingModel, scope_key("persona"))
     if stored is None:
         return
     try:

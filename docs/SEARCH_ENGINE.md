@@ -23,8 +23,8 @@ SearchEngine (Fassade)
 
 - Endpoint: `{searxng_url}/search?q=…&format=json&language=…`
 - Benötigt eine SearXNG-Instanz mit freigegebener JSON-API
-  (`settings.yml`: `formats: [html, json]`), typischerweise lokal per
-  Docker (`localhost:8888`).
+  (`settings.yml`: `formats: [html, json]`), typischerweise lokal
+  (`localhost:8888`).
 - Läuft die Instanz nicht, meldet `status()` ehrlich
   `available: false` mit Detail – es gibt keinen Fake-Zustand.
 

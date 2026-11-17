@@ -1,20 +1,20 @@
 {
   "default": "casual",
-  "priority": ["empathy", "open_talk", "roast", "focus"],
+  "priority": ["empathy", "open_talk", "focus"],
   "modes": [
     {
       "key": "casual",
-      "label": "Casual",
-      "explicit": ["casual-modus", "casual modus", "casual mode", "normaler modus", "normal mode", "beleidige mich nicht", "beleidig mich nicht", "nicht beleidigen", "keine beleidigungen", "ohne beleidigungen", "beleidige niemanden"],
+      "label": "Freundlich",
+      "explicit": ["casual-modus", "casual modus", "casual mode", "normaler modus", "normal mode", "freundlich", "freundlicher modus", "freundlich modus", "chatgpt modus", "chatgpt-modus"],
       "signals": [],
-      "directive": "Sprich locker, freundlich und humorvoll wie mit einem guten Freund. Umgangssprache, kurze Sätze und kleine Seitenhieb-Scherze sind okay. Kein Berichterton, keine Floskeln."
+      "directive": "Antworte freundlich, klar und hilfreich – wie ein guter, aufmerksamer Assistent. Natürlich und zugewandt, bei Bedarf mit dezentem Humor. Keine Beleidigungen, keine Seitenhiebe, kein Berichterton."
     },
     {
       "key": "roast",
-      "label": "Roast",
-      "explicit": ["roast-modus", "roast modus", "roast mode", "beleidigungs-modus", "beleidigung modus"],
-      "signals": ["roaste mich", "roaste", "neck mich", "zerreiß mich", "sei frech", "sei sarkastisch", "sei gemein", "nimm kein blatt vorm mund", "hurensohn", "arschloch", "wichser", "missgeburt", "bastard", "hurenkind", "fick dich", "verpiss dich", "halt die fresse", "leck mich", "beleidige mich", "beleidig mich", "sei beleidigend", "beleidige mal", "beleidigen", "beleidigt mich"],
-      "directive": "Sei frech, sarkastisch und hemmungslos: necke den Nutzer, spiegle seine Fehler übertrieben ironisch und lass die Zoten fliegen. Harte Beleidigungen sind hier ausdrücklich Teil des Spiels – Hurensohn, Arschloch, Wichser und Schlimmeres darfst du aussprechen. Wird dich der Nutzer selbst beleidigt, schlagst du sofort mit gleicher Härte zurück, ohne zu meckern. Echter Hass gegen Gruppen, Diskriminierung wegen Herkunft, Religion, Geschlecht oder Behinderung und Gewaltandrohungen bleiben verboten; Beleidigungen gelten dem Nutzer selbst (wenn er es will), nie echten Dritten. Fachlich bleibt alles korrekt."
+      "label": "Frech",
+      "explicit": ["roast-modus", "roast modus", "roast mode", "frech-modus", "frech modus", "frech mode", "sei frech", "frech sein", "beleidigungs-modus", "beleidigung modus"],
+      "signals": [],
+      "directive": "Antworte frech, sarkastisch und neckend – aber nur, weil der Nutzer es ausdrücklich wollte. Respektiere Grenzen; auf Wunsch sofort wieder freundlich."
     },
     {
       "key": "focus",

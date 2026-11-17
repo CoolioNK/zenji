@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
+from app.core.context import get_current_user_id, scope_key
 from app.core.exceptions import ValidationError
 from app.core.logging import get_logger
 from app.database.database import Database
@@ -41,6 +42,7 @@ from app.web_intelligence.research_engine import MAX_CONTEXT_CHARS, ResearchEngi
 from app.web_intelligence.research_planner import RESEARCH_MODES, ResearchPlanner, normalize_mode
 from app.web_intelligence.search_engine import (
     BraveProvider,
+    DuckDuckGoProvider,
     SearchEngine,
     SearchProvider,
     SearXNGProvider,
@@ -54,14 +56,14 @@ if TYPE_CHECKING:  # pragma: no cover
 log = get_logger("web_intelligence")
 
 WEB_SETTINGS_KEY = "web_intelligence"
-PROVIDERS = ("searxng", "brave")
+PROVIDERS = ("duckduckgo", "searxng", "brave")
 
 
 @dataclass(slots=True)
 class WebConfig:
     """Laufzeit-Konfiguration der Web Intelligence (Nutzereinstellungen)."""
 
-    provider: str = "searxng"
+    provider: str = "duckduckgo"
     searxng_url: str = "http://localhost:8888"
     brave_api_key: str = ""
     language: str = "de"
@@ -93,7 +95,7 @@ class WebIntelligenceService:
         config = WebConfig()
         try:
             with self._db.session() as session:
-                record = session.get(SettingModel, WEB_SETTINGS_KEY)
+                record = session.get(SettingModel, scope_key(WEB_SETTINGS_KEY))
             if record is not None:
                 try:
                     stored = json.loads(record.value or "{}")
@@ -142,10 +144,17 @@ class WebIntelligenceService:
                 raise ValidationError("cache_ttl_s muss zwischen 60 und 86400 Sekunden liegen.")
         try:
             with self._db.session() as session:
-                record = session.get(SettingModel, WEB_SETTINGS_KEY)
+                scoped_key = scope_key(WEB_SETTINGS_KEY)
+                record = session.get(SettingModel, scoped_key)
                 payload = json.dumps(config.as_dict(), ensure_ascii=False)
                 if record is None:
-                    session.add(SettingModel(key=WEB_SETTINGS_KEY, value=payload))
+                    session.add(
+                        SettingModel(
+                            key=scoped_key,
+                            value=payload,
+                            user_id=get_current_user_id(),
+                        )
+                    )
                 else:
                     record.value = payload
         except ValidationError:
@@ -158,6 +167,7 @@ class WebIntelligenceService:
 
     def _search_engine(self, config: WebConfig) -> SearchEngine:
         providers: dict[str, SearchProvider] = {
+            "duckduckgo": DuckDuckGoProvider(language=config.language),
             "searxng": SearXNGProvider(config.searxng_url, language=config.language),
             "brave": BraveProvider(config.brave_api_key),
         }

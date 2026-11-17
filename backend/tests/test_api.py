@@ -79,19 +79,19 @@ async def test_settings_struktur(client):
     assert data["llm"]["model"] == "qwen3:8b"
     assert data["llm"]["temperature"] == 0.7
     assert data["providers"]["ollama"]["base_url"] == "http://testserver:11434"
-    assert "ZENJI" in data["persona"]["system_prompt"]
+    assert "Zenji Ango" in data["persona"]["system_prompt"]
 
 
 async def test_settings_patch_persistiert(client):
     client, _ = client
     response = await client.patch(
         "/api/settings",
-        json={"llm": {"temperature": 0.4, "model": "llama3.1:8b"}},
+        json={"llm": {"temperature": 0.4}},
     )
     assert response.status_code == 200
     data = response.json()
     assert data["llm"]["temperature"] == 0.4
-    assert data["llm"]["model"] == "llama3.1:8b"
+    assert data["llm"]["model"] == "qwen3:8b"
     assert data["llm"]["top_k"] == 20  # unverändert
 
     # Persistenz: zweites Lesen zeigt dieselben Werte

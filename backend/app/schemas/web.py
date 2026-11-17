@@ -13,7 +13,7 @@ class WebSearchRequest(BaseModel):
     model_config = ConfigDict(protected_namespaces=(), extra="forbid")
 
     query: str = Field(min_length=1, max_length=400)
-    provider: str | None = Field(default=None, description="searxng | brave (Default: Einstellung)")
+    provider: str | None = Field(default=None, description="duckduckgo | searxng | brave (Default: Einstellung)")
     limit: int = Field(default=10, ge=1, le=25)
 
     @field_validator("provider")
@@ -22,8 +22,8 @@ class WebSearchRequest(BaseModel):
         if value is None or not value.strip():
             return None
         normalized = value.strip().lower()
-        if normalized not in ("searxng", "brave"):
-            raise ValueError("provider muss 'searxng' oder 'brave' sein.")
+        if normalized not in ("duckduckgo", "searxng", "brave"):
+            raise ValueError("provider muss 'duckduckgo', 'searxng' oder 'brave' sein.")
         return normalized
 
 
@@ -84,8 +84,8 @@ class WebSettingsPatch(BaseModel):
         if value is None:
             return None
         normalized = value.strip().lower()
-        if normalized not in ("searxng", "brave"):
-            raise ValueError("provider muss 'searxng' oder 'brave' sein.")
+        if normalized not in ("duckduckgo", "searxng", "brave"):
+            raise ValueError("provider muss 'duckduckgo', 'searxng' oder 'brave' sein.")
         return normalized
 
     @field_validator("searxng_url")

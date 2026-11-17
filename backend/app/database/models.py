@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -22,6 +22,16 @@ def utcnow() -> datetime:
 
 def new_id() -> str:
     return uuid.uuid4().hex
+
+
+def user_id_column(nullable: bool = True):
+    """Spalte für die Nutzer-Zuordnung (Supabase-Auth-UUID).
+
+    ``Uuid(as_uuid=False)`` ist portabel: auf Postgres nativ als ``uuid``, auf
+    SQLite als Text.  Im lokalen Modus bleibt die Spalte ``NULL``; in Supabase
+    setzt jede Insert sie aus dem Nutzer-Kontext und RLS erzwingt die Trennung.
+    """
+    return mapped_column(Uuid(as_uuid=False), nullable=nullable, index=True)
 
 
 ROLES = ("system", "user", "assistant")
@@ -37,6 +47,7 @@ class ConversationModel(Base):
     __tablename__ = "conversations"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str | None] = user_id_column()
     title: Mapped[str] = mapped_column(String(200), default="Neue Konversation")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -60,6 +71,7 @@ class MessageModel(Base):
     )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str | None] = user_id_column()
     conversation_id: Mapped[str] = mapped_column(
         ForeignKey("conversations.id", ondelete="CASCADE"), index=True
     )
@@ -75,8 +87,23 @@ class SettingModel(Base):
 
     __tablename__ = "settings"
 
-    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    user_id: Mapped[str | None] = user_id_column()
     value: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class ProfileModel(Base):
+    """Ein Nutzer-Account (gespiegelt aus ``auth.users`` für RLS/Profile)."""
+
+    __tablename__ = "profiles"
+
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), default="")
+    display_name: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
@@ -122,10 +149,14 @@ class PersonalityModel(Base):
             "response_length IN ('short','balanced','detailed')",
             name="ck_personality_length",
         ),
+        # Profilnamen sind pro Nutzer eindeutig, nicht global (mehrere Accounts
+        # dürfen z. B. beide ein Profil „Zenji“ besitzen).
+        UniqueConstraint("user_id", "name", name="uq_personality_user_name"),
     )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
-    name: Mapped[str] = mapped_column(String(80), unique=True)
+    user_id: Mapped[str | None] = user_id_column()
+    name: Mapped[str] = mapped_column(String(80))
     identity: Mapped[str] = mapped_column(Text, default="")
     base_personality: Mapped[str] = mapped_column(String(20), default="neutral")
     communication_style: Mapped[str] = mapped_column(String(200), default="")
@@ -178,7 +209,8 @@ class PolicyModel(Base):
         CheckConstraint("source IN ('system','user')", name="ck_policy_source"),
     )
 
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    user_id: Mapped[str | None] = user_id_column()
     name: Mapped[str] = mapped_column(String(120))
     instruction: Mapped[str] = mapped_column(Text)
     priority: Mapped[int] = mapped_column(default=50)
@@ -214,6 +246,7 @@ class MemoryModel(Base):
     )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str | None] = user_id_column()
     content: Mapped[str] = mapped_column(Text)
     content_hash: Mapped[str] = mapped_column(String(64), index=True, default="")
     category: Mapped[str] = mapped_column(String(40), default="allgemein")
@@ -288,6 +321,7 @@ class ResearchSessionModel(Base):
     )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str | None] = user_id_column()
     question: Mapped[str] = mapped_column(Text)
     mode: Mapped[str] = mapped_column(String(10), default="standard")
     status: Mapped[str] = mapped_column(String(12), default="running")
@@ -308,6 +342,7 @@ class SearchQueryModel(Base):
     __tablename__ = "search_queries"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str | None] = user_id_column()
     session_id: Mapped[str] = mapped_column(
         ForeignKey("research_sessions.id", ondelete="CASCADE"), index=True
     )
@@ -323,6 +358,7 @@ class SearchResultModel(Base):
     __tablename__ = "search_results"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str | None] = user_id_column()
     query_id: Mapped[str] = mapped_column(
         ForeignKey("search_queries.id", ondelete="CASCADE"), index=True
     )
@@ -357,6 +393,7 @@ class SourceModel(Base):
     )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str | None] = user_id_column()
     original_url: Mapped[str] = mapped_column(Text)
     canonical_url: Mapped[str] = mapped_column(Text, index=True)
     domain: Mapped[str] = mapped_column(String(255), default="", index=True)
@@ -388,6 +425,7 @@ class SourceSnapshotModel(Base):
     __tablename__ = "source_snapshots"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str | None] = user_id_column()
     source_id: Mapped[str] = mapped_column(
         ForeignKey("sources.id", ondelete="CASCADE"), index=True, unique=True
     )
@@ -404,6 +442,7 @@ class CitationModel(Base):
     __tablename__ = "citations"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str | None] = user_id_column()
     session_id: Mapped[str] = mapped_column(
         ForeignKey("research_sessions.id", ondelete="CASCADE"), index=True
     )
@@ -421,7 +460,8 @@ class ResearchCacheModel(Base):
     __tablename__ = "research_cache"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
-    cache_key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    user_id: Mapped[str | None] = user_id_column()
+    cache_key: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     kind: Mapped[str] = mapped_column(String(20), default="fetch")
     payload: Mapped[str] = mapped_column(Text, default="{}")
     content_hash: Mapped[str] = mapped_column(String(64), default="")

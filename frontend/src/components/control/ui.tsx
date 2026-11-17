@@ -1,11 +1,11 @@
-/* Geteilte kleine Bausteine des Control Centers (Design aus SettingsPanel). */
+/* Geteilte kleine Bausteine des Control Centers im Zenji Design-System. */
 
 import type { ReactNode } from "react";
 
 export function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div>
-      <h3 className="mb-3 text-[10px] font-semibold tracking-[0.16em] text-ink-500 uppercase">
+    <div className="rounded-xl border border-border bg-background/50 p-4">
+      <h3 className="mb-3 eyebrow text-accent">
         {title}
       </h3>
       <div className="space-y-3">{children}</div>
@@ -21,14 +21,14 @@ export function Badge({
   tone?: "jade" | "amber" | "quiet" | "solid";
 }) {
   const tones: Record<string, string> = {
-    jade: "border-jade-600/60 bg-jade-600/10 text-jade-500",
-    amber: "border-signal-amber/50 bg-signal-amber/10 text-signal-amber",
-    quiet: "border-ink-600 bg-ink-800 text-ink-300",
-    solid: "border-ink-500 bg-ink-700 text-ink-100",
+    jade: "border-accent/40 bg-accent/10 text-accent",
+    amber: "border-signal-amber/40 bg-signal-amber/10 text-signal-amber",
+    quiet: "border-border bg-card text-muted-foreground",
+    solid: "border-border bg-primary text-primary-foreground",
   };
   return (
     <span
-      className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase ${tones[tone]}`}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${tones[tone]}`}
     >
       {children}
     </span>
@@ -38,10 +38,10 @@ export function Badge({
 export function Card({ children, selected = false }: { children: ReactNode; selected?: boolean }) {
   return (
     <div
-      className={`rounded-xl border px-4 py-3 transition-colors ${
+      className={`rounded-xl border p-4 transition-colors ${
         selected
-          ? "border-jade-600/70 bg-ink-900"
-          : "border-ink-700 bg-ink-900 hover:border-ink-600"
+          ? "border-accent bg-accent/5 shadow-sm"
+          : "border-border bg-card hover:border-foreground/30"
       }`}
     >
       {children}
@@ -62,13 +62,13 @@ export function TextField({
 }) {
   return (
     <label className="block">
-      <span className="text-[12.5px] text-ink-200">{label}</span>
+      <span className="text-xs text-foreground">{label}</span>
       <input
         type="text"
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1.5 w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-[12.5px] text-ink-50 outline-none focus:border-jade-600"
+        className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-1.5 font-mono text-xs text-foreground outline-none focus:border-accent transition-colors"
       />
     </label>
   );
@@ -91,14 +91,14 @@ export function TextArea({
 }) {
   return (
     <label className="block">
-      <span className="text-[12.5px] text-ink-200">{label}</span>
+      <span className="text-xs text-foreground">{label}</span>
       <textarea
         rows={rows}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className={`mt-1.5 w-full resize-y rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-[12.5px] leading-relaxed text-ink-50 outline-none focus:border-jade-600 ${
-          mono ? "font-mono text-[11.5px]" : ""
+        className={`mt-1.5 w-full resize-y rounded-lg border border-border bg-background p-3 text-xs leading-relaxed text-foreground outline-none focus:border-accent transition-colors ${
+          mono ? "font-mono text-xs" : "font-sans"
         }`}
       />
     </label>
@@ -116,9 +116,9 @@ export function SliderField({
 }) {
   return (
     <label className="block">
-      <span className="flex items-center justify-between text-[12.5px] text-ink-200">
+      <span className="flex items-center justify-between text-xs text-foreground">
         {label}
-        <span className="text-[11px] text-ink-400">{Math.round(value * 100)}%</span>
+        <span className="font-mono text-[11px] text-accent font-medium">{Math.round(value * 100)}%</span>
       </span>
       <input
         type="range"
@@ -127,7 +127,7 @@ export function SliderField({
         step={0.05}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="mt-1.5 w-full accent-jade-600"
+        className="mt-2 w-full accent-accent"
       />
     </label>
   );
@@ -146,11 +146,11 @@ export function SelectField({
 }) {
   return (
     <label className="block">
-      <span className="text-[12.5px] text-ink-200">{label}</span>
+      <span className="text-xs text-foreground">{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1.5 w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-[12.5px] text-ink-50 outline-none focus:border-jade-600"
+        className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-accent transition-colors"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -175,7 +175,7 @@ export function PrimaryButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="rounded-lg bg-jade-600 px-3.5 py-2 text-[12.5px] font-medium text-ink-950 transition-colors hover:bg-jade-500 disabled:bg-ink-700 disabled:text-ink-400"
+      className="inline-flex items-center justify-center rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-all duration-300 hover:bg-accent hover:text-white disabled:opacity-40 shadow-sm cursor-pointer"
     >
       {children}
     </button>
@@ -197,10 +197,10 @@ export function QuietButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-lg border px-3 py-2 text-[12.5px] transition-colors disabled:cursor-not-allowed disabled:border-ink-700 disabled:text-ink-600 ${
+      className={`rounded-full border px-3.5 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
         danger
           ? "border-signal-amber/40 text-signal-amber hover:bg-signal-amber/10"
-          : "border-ink-600 text-ink-200 hover:bg-ink-800 hover:text-ink-50"
+          : "border-border text-muted-foreground hover:bg-card hover:text-foreground"
       }`}
     >
       {children}
@@ -209,9 +209,9 @@ export function QuietButton({
 }
 
 export function Hint({ children }: { children: ReactNode }) {
-  return <p className="text-[11.5px] leading-relaxed text-ink-400">{children}</p>;
+  return <p className="text-xs leading-relaxed text-muted-foreground">{children}</p>;
 }
 
 export function ErrorNote({ children }: { children: ReactNode }) {
-  return <p className="text-[12px] text-signal-amber">{children}</p>;
+  return <p className="text-xs text-signal-amber">{children}</p>;
 }

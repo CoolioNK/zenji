@@ -27,7 +27,6 @@ from app.schemas.settings import (
     LLMSettings,
     LLMSettingsPartial,
     OllamaProviderSettings,
-    OllamaProviderSettingsPartial,
     PersonaSettings,
     PersonaSettingsPartial,
     ProvidersGroup,
@@ -99,28 +98,27 @@ class SettingsService:
                 log.warning("Ungültige gespeicherte Einstellung '%s' ignoriert.", key)
                 continue
             if key == "llm":
-                clean = LLMSettingsPartial(**payload).model_dump(exclude_none=True)
+                # Nur UI-änderbare Felder akzeptieren; ältere/andere Keys
+                # (top_p, num_ctx, …) ignorieren, damit gespeicherte Werte nie
+                # einen 422/500 auslösen.
+                allowed = set(LLMSettingsPartial.model_fields)
+                clean = LLMSettingsPartial(
+                    **{k: v for k, v in payload.items() if k in allowed}
+                ).model_dump(exclude_none=True)
                 merged["llm"].update(clean)
-            elif key == "providers":
-                ollama_patch = payload.get("ollama") or {}
-                clean = OllamaProviderSettingsPartial(**ollama_patch).model_dump(exclude_none=True)
-                merged["providers"]["ollama"].update(clean)
             elif key == "persona":
-                clean = PersonaSettingsPartial(**payload).model_dump(exclude_none=True)
+                allowed = set(PersonaSettingsPartial.model_fields)
+                clean = PersonaSettingsPartial(
+                    **{k: v for k, v in payload.items() if k in allowed}
+                ).model_dump(exclude_none=True)
                 merged["persona"].update(clean)
         return SettingsOut.model_validate(merged)
 
     # --- Schreiben ---------------------------------------------------------------
     def patch(self, session: Session, patch: SettingsPatch) -> SettingsOut:
-        """Validiert und speichert Änderungen (Deep-Merge je Gruppe)."""
+        """Validiert und speichert Änderungen (nur temperature und system_prompt)."""
         if patch.llm is not None:
             self._save_group(session, "llm", patch.llm.model_dump(exclude_none=True))
-        if patch.providers is not None and patch.providers.ollama is not None:
-            self._save_group(
-                session,
-                "providers",
-                {"ollama": patch.providers.ollama.model_dump(exclude_none=True)},
-            )
         if patch.persona is not None:
             self._save_group(session, "persona", patch.persona.model_dump(exclude_none=True))
         return self.effective(session)

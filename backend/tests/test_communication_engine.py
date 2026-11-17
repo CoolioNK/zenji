@@ -23,8 +23,8 @@ def test_fuenf_modi_aus_seed_datei(manager):
     available = manager.available()
     assert {mode["key"] for mode in available} == set(COMMUNICATION_MODE_KEYS)
     labels = {mode["key"]: mode["label"] for mode in available}
-    assert labels["casual"] == "Casual"
-    assert labels["roast"] == "Roast"
+    assert labels["casual"] == "Freundlich"
+    assert labels["roast"] == "Frech"
     assert labels["focus"] == "Fokus"
     assert labels["empathy"] == "Empathie"
     assert labels["open_talk"] == "Open Talk"
@@ -34,8 +34,8 @@ def test_fuenf_modi_aus_seed_datei(manager):
 def test_modi_nicht_hardcodiert(manager):
     """Direktiven leben in der JSON-Seed-Datei, nicht im Python-Code."""
     directive = manager.mode_directives("casual")
-    # Stiltitel der Seed-Datei tauchen im kompilierten Text auf:
-    assert "guten Freund" in directive
+    # Freundliche Direktive der Seed-Datei:
+    assert "guter, aufmerksamer Assistent" in directive
     assert "## Kommunikationsmodus" in directive
 
 
@@ -66,9 +66,12 @@ def test_empathie_bei_kummer_signale(manager):
     assert manager.detect_mode("Ich fühle mich gerade total überfordert.") == "empathy"
 
 
-def test_roast_bei_frech_aufforderung(manager):
-    assert manager.detect_mode("Roaste mich mal richtig durch!") == "roast"
-    assert manager.detect_mode("Sei sarkastisch, ich halte das aus.") == "roast"
+def test_roast_nur_bei_explizitem_frech_modus(manager):
+    assert manager.detect_mode("Roast-Modus an!") == "roast"
+    assert manager.detect_mode("Sei frech, ich halte das aus.") == "roast"
+    assert manager.detect_mode("Wechsle in den Beleidigungs-Modus.") == "roast"
+    # Ohne ausdrückliche Ansage bleibt ZENJI freundlich:
+    assert manager.detect_mode("Roaste mich mal richtig durch!") == "casual"
 
 
 def test_fokus_bei_technischen_signale(manager):
@@ -99,18 +102,18 @@ def test_signale_prioritaet_thema_vor_aufgabe(manager):
 # --- Beleidigungs-Banter (v0.4.0) -----------------------------------------------------------
 
 
-def test_beleidigungen_gegen_zenji_loesen_roast_aus(manager):
-    assert manager.detect_mode("Du bist so ein Arschloch!") == "roast"
-    assert manager.detect_mode("Du Hurensohn!") == "roast"
-    assert manager.detect_mode("Du Wichser, halt die Fresse.") == "roast"
-    assert manager.detect_mode("Verpiss dich, Missgeburt!") == "roast"
-    assert manager.detect_mode("Fick dich, Bastard.") == "roast"
+def test_beleidigungen_gegen_zenji_bleiben_freundlich(manager):
+    assert manager.detect_mode("Du bist so ein Arschloch!") == "casual"
+    assert manager.detect_mode("Du Hurensohn!") == "casual"
+    assert manager.detect_mode("Du Wichser, halt die Fresse.") == "casual"
+    assert manager.detect_mode("Verpiss dich, Missgeburt!") == "casual"
+    assert manager.detect_mode("Fick dich, Bastard.") == "casual"
 
 
-def test_beleidigungs_aufforderung_loest_roast_aus(manager):
-    assert manager.detect_mode("Beleidige mich mal richtig!") == "roast"
-    assert manager.detect_mode("Beleidig mich, ich halte das aus.") == "roast"
-    assert manager.detect_mode("Sei mal richtig beleidigend.") == "roast"
+def test_beleidigungs_aufforderung_ohne_modus_bleibt_casual(manager):
+    assert manager.detect_mode("Beleidige mich mal richtig!") == "casual"
+    assert manager.detect_mode("Beleidig mich, ich halte das aus.") == "casual"
+    assert manager.detect_mode("Sei mal richtig beleidigend.") == "casual"
     assert manager.detect_mode("Wechsle in den Beleidigungs-Modus.") == "roast"
 
 
@@ -126,11 +129,11 @@ def test_empathie_schlaegt_provozierende_beleidigung(manager):
     assert manager.detect_mode("Mir geht's nicht gut, du Arschloch.") == "empathy"
 
 
-def test_directive_roast_enhaelt_gegenfeuer_und_harte_worter(manager):
+def test_directive_roast_ist_frech_und_grenzenbewusst(manager):
     directive = manager.mode_directives("roast")
-    assert "gleicher Härte" in directive  # Gegenfeuer-Auftrag
-    assert "Hurensohn" in directive
-    assert "Arschloch" in directive
+    assert "frech" in directive
+    assert "sarkastisch" in directive
+    assert "Respektiere Grenzen" in directive
 
 
 # --- Manueller Override ------------------------------------------------------------------
@@ -146,7 +149,7 @@ def test_override_gross_klein_und_leerzeichen_tolerant(manager):
 
 
 def test_unbekannter_override_faellt_auf_automatik_zurueck(manager):
-    assert manager.detect_mode("Roaste mich!", override="wilder_modus") == "roast"
+    assert manager.detect_mode("Roast-Modus an!", override="wilder_modus") == "roast"
     assert manager.detect_mode("Hallo", override="wilder_modus") == "casual"
 
 
@@ -164,7 +167,7 @@ def test_directive_enthaelt_kopf_und_temporaerhinweis(manager):
 def test_directive_roast_enhaelt_grenzen(manager):
     directive = manager.mode_directives("roast")
     assert "sarkastisch" in directive
-    assert "verboten" in directive  # Grenzen bleiben gewahrt
+    assert "Respektiere Grenzen" in directive
 
 
 def test_directive_open_talk_enhaelt_sicherheitsrahmen(manager):

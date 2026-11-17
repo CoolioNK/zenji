@@ -144,6 +144,16 @@ def zenji_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("ZENJI_LOG_LEVEL", "WARNING")
     monkeypatch.setenv("ZENJI_OLLAMA_BASE_URL", "http://testserver:11434")
     monkeypatch.setenv("ZENJI_CORS_ORIGINS", "http://localhost:5173")
+    # Tests laufen bewusst im lokalen Single-User-Modus: Supabase aus einer
+    # echten backend/.env darf die Tests nicht in den Auth-/RLS-Pfad zwingen.
+    for supabase_var in (
+        "ZENJI_SUPABASE_URL",
+        "ZENJI_SUPABASE_ANON_KEY",
+        "ZENJI_SUPABASE_SERVICE_ROLE_KEY",
+        "ZENJI_SUPABASE_DB_URL",
+        "ZENJI_SUPABASE_JWT_SECRET",
+    ):
+        monkeypatch.setenv(supabase_var, "")
     # Explizite Defaults (unabhängig vom Rechnerzustand):
     monkeypatch.setenv("ZENJI_LLM__PROVIDER", "ollama")
     monkeypatch.setenv("ZENJI_LLM__MODEL", "qwen3:8b")

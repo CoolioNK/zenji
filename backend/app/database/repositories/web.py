@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.core.context import get_current_user_id, scope_key
 from app.database.models import (
     CitationModel,
     ResearchCacheModel,
@@ -65,6 +66,7 @@ class WebRepository:
     ) -> ResearchSessionModel:
         record = ResearchSessionModel(
             id=new_id(),
+            user_id=get_current_user_id(),
             question=question,
             mode=mode,
             status="running",
@@ -132,6 +134,7 @@ class WebRepository:
     ) -> SearchQueryModel:
         record = SearchQueryModel(
             id=new_id(),
+            user_id=get_current_user_id(),
             session_id=research_session_id,
             query=query,
             provider=provider,
@@ -154,6 +157,7 @@ class WebRepository:
             session.add(
                 SearchResultModel(
                     id=new_id(),
+                    user_id=get_current_user_id(),
                     query_id=query_id,
                     session_id=research_session_id,
                     url=str(result.get("url", "")),
@@ -218,6 +222,7 @@ class WebRepository:
             return existing, False
         record = SourceModel(
             id=new_id(),
+            user_id=get_current_user_id(),
             original_url=original_url,
             canonical_url=canonical_url,
             domain=domain,
@@ -292,6 +297,7 @@ class WebRepository:
             return existing
         record = SourceSnapshotModel(
             id=new_id(),
+            user_id=get_current_user_id(),
             source_id=source_id,
             content=content,
             content_hash=content_hash_value,
@@ -322,6 +328,7 @@ class WebRepository:
             session.add(
                 CitationModel(
                     id=new_id(),
+                    user_id=get_current_user_id(),
                     session_id=research_session_id,
                     source_id=str(entry.get("source_id", "")),
                     statement=str(entry.get("statement", "")),
@@ -345,6 +352,7 @@ class WebRepository:
 
     def cache_get(self, session: Session, cache_key: str) -> Any | None:
         """Liefert den Cache-Payload, falls vorhanden und **nicht abgelaufen**."""
+        cache_key = scope_key(cache_key)
         record = session.scalars(
             select(ResearchCacheModel).where(ResearchCacheModel.cache_key == cache_key).limit(1)
         ).first()
@@ -369,6 +377,7 @@ class WebRepository:
         content_hash_value: str = "",
         ttl_s: float = DEFAULT_CACHE_TTL_S,
     ) -> ResearchCacheModel:
+        cache_key = scope_key(cache_key)
         existing = session.scalars(
             select(ResearchCacheModel).where(ResearchCacheModel.cache_key == cache_key).limit(1)
         ).first()
@@ -383,7 +392,8 @@ class WebRepository:
             return existing
         record = ResearchCacheModel(
             id=new_id(),
-            cache_key=cache_key[:128],
+            user_id=get_current_user_id(),
+            cache_key=cache_key[:255],
             kind=kind,
             payload=_dump(payload),
             content_hash=content_hash_value,

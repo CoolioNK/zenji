@@ -58,13 +58,17 @@ class LLMError(ZenjiError):
 
 
 class ProviderConnectionError(LLMError):
-    """Der Provider (z. B. Ollama) ist nicht erreichbar."""
+    """Der Provider (z. B. Ollama oder Cloudflare) ist nicht erreichbar."""
 
     code = "OLLAMA_UNAVAILABLE"
 
     def __init__(self, message: str, *, provider: str = "ollama", detail: Any | None = None) -> None:
         super().__init__(message, detail=detail)
         self.provider = provider
+        # Instance-attribut überschreibt den Klassen-Code: Der Fehlercode nennt
+        # den tatsächlichen Provider (CLOUDFLARE_UNAVAILABLE statt OLLAMA_UNAVAILABLE).
+        if provider and provider != "ollama":
+            self.code = f"{provider.upper()}_UNAVAILABLE"
 
 
 class ModelNotFoundError(LLMError):

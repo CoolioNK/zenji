@@ -41,14 +41,14 @@ from tests.conftest import FAKE_REPLY, FakeProvider
 
 #: Spezifikationswerte der Aufgabe (Skala 0–100 → 0–1).
 SPEC_VALUES = {
-    "humor": 0.9,
-    "sarcasm": 0.65,
-    "cheekiness": 0.75,
-    "directness": 0.95,
-    "friendliness": 0.9,
+    "humor": 0.45,
+    "sarcasm": 0.1,
+    "cheekiness": 0.15,
+    "directness": 0.7,
+    "friendliness": 0.95,
     "empathy": 0.85,
-    "curiosity": 0.9,
-    "initiative": 0.85,
+    "curiosity": 0.85,
+    "initiative": 0.7,
 }
 
 
@@ -89,21 +89,21 @@ def test_alle_systemprofile_haben_neue_achsen(db):
         # Abgestufte Charaktere statt einer Einheitsflotte:
         by_name = {p.name: p for p in profiles}
         assert by_name["Professional"].humor < by_name["Zenji"].humor
-        assert by_name["Casual"].sarcasm > by_name["Neutral"].sarcasm
+        assert by_name["Friendly"].sarcasm > by_name["Neutral"].sarcasm
 
 
 def test_kompilierung_zeigt_neue_achsen(db):
     engine = PersonalityEngine()
     with db.session() as session:
         compiled = engine.compile_context(engine.require_active(session))
-    assert "Humor: sehr stark" in compiled
-    assert "Sarkasmus: stark" in compiled          # 0.65
-    assert "Frechheit: stark" in compiled          # 0.75
-    assert "Direktheit: sehr stark" in compiled    # 0.95
+    assert "Humor: mittel" in compiled
+    assert "Sarkasmus: sehr gering" in compiled
+    assert "Frechheit: sehr gering" in compiled
+    assert "Direktheit: stark" in compiled
     assert "Freundlichkeit: sehr stark" in compiled
     assert "Empathie: sehr stark" in compiled
     assert "Neugier: sehr stark" in compiled
-    assert "Eigeninitiative: sehr stark" in compiled
+    assert "Eigeninitiative: stark" in compiled
 
 
 def test_kein_profil_hartcodiert_in_engine():
@@ -300,7 +300,7 @@ def test_persoenlichkeit_ueberlebt_neustart(tmp_path):
         zenji = session.scalars(
             select(PersonalityModel).where(PersonalityModel.name == "Zenji")
         ).first()
-        assert zenji.humor == pytest.approx(0.9)  # Seed unverändert
+        assert zenji.humor == pytest.approx(0.45)  # Seed unverändert
 
 
 # --- Modell-Unabhängigkeit -----------------------------------------------------------------

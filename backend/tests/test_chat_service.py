@@ -55,7 +55,7 @@ async def test_persona_wird_als_systemprompt_gesendet(tmp_path):
     await chat.send_message(ChatRequest(message="Hallo"))
     call = provider.chat_calls[0]
     assert call["roles"][0] == "system"
-    assert "ZENJI" in call["messages"][0].content
+    assert "Zenji Ango" in call["messages"][0].content
     assert call["roles"][1] == "user"
 
 
@@ -127,9 +127,8 @@ async def test_settings_aendern_wirkt_auf_chat(tmp_path):
     )
     with db.session() as session:
         settings_service.patch(
-            session, SettingsPatch(llm={"model": "llama3.1:8b", "temperature": 0.2})
+            session, SettingsPatch(llm={"temperature": 0.2})
         )
     await chat.send_message(ChatRequest(message="Frage"))
     call = provider.chat_calls[0]
-    assert call["model"] == "llama3.1:8b"
     assert call["options"].temperature == 0.2

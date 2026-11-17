@@ -47,16 +47,24 @@ class ModelManager:
             raise ProviderConnectionError(
                 f"{provider_name.capitalize()} ist nicht erreichbar "
                 f"({status.detail or 'unbekannter Grund'}). "
-                "Bitte den Modellserver starten und erneut versuchen."
+                "Bitte Konfiguration und Verbindung prüfen und erneut versuchen."
             )
         if not await self._provider.has_model(model):
-            raise ModelNotFoundError(
-                f"Modell '{model}' ist nicht verfügbar.",
-                detail=(
+            if self._provider.name == "cloudflare":
+                detail = (
+                    f"Das Modell ist im Cloudflare-Katalog nicht vorhanden. Prüfe "
+                    f"ZENJI_LLM__MODEL (z. B. '@cf/meta/llama-3.1-8b-instruct-fast'; "
+                    "Liste: GET /api/models)."
+                )
+            else:
+                detail = (
                     f"Das Modell muss zuerst geladen werden. Für Ollama: "
                     f"'ollama pull {model}' ausführen – die Gewichte liegen "
                     "dann auf der externen SSD (siehe docs/STORAGE.md)."
-                ),
+                )
+            raise ModelNotFoundError(
+                f"Modell '{model}' ist nicht verfügbar.",
+                detail=detail,
             )
         log.debug("Modell '%s' ist verfügbar", model)
 
@@ -79,10 +87,16 @@ class ModelManager:
                 model_available=False,
                 message="Verbindung zum Provider während der Prüfung verloren.",
             )
-        message = f"Modell '{model}' verfügbar." if available else (
-            f"Modell '{model}' nicht geladen. "
-            f"Laden via 'ollama pull {model}' (Gewichte auf der SSD, siehe docs/STORAGE.md)."
-        )
+        if self._provider.name == "cloudflare":
+            message = (
+                f"Modell '{model}' ist im Cloudflare-Katalog nicht vorhanden. "
+                "Prüfe ZENJI_LLM__MODEL."
+            ) if not available else f"Modell '{model}' verfügbar."
+        else:
+            message = f"Modell '{model}' verfügbar." if available else (
+                f"Modell '{model}' nicht geladen. "
+                f"Laden via 'ollama pull {model}' (Gewichte auf der SSD, siehe docs/STORAGE.md)."
+            )
         return ModelStatus(
             model=model,
             provider_available=True,

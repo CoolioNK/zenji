@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.context import get_current_user_id
 from app.database.models import MessageModel, ROLES, touch, utcnow
 
 
@@ -22,6 +23,7 @@ class MessageRepository:
             raise ValueError(f"Unbekannte Rolle '{role}'. Erlaubt: {ROLES}")
         message = MessageModel(
             conversation_id=conversation_id,
+            user_id=get_current_user_id(),
             role=role,
             content=content,
             created_at=utcnow(),

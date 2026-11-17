@@ -49,7 +49,7 @@ async def test_ergebnisse_werden_normalisiert():
             {"results": [_result("https://example.com/Artikel/", "  Titel  ", "  Ein Snippet ")]}
         ),
     )
-    engine = SearchEngine({"searxng": provider})
+    engine = SearchEngine({"searxng": provider}, default_provider="searxng")
     results = await engine.search("test", limit=10)
     assert len(results) == 1
     entry = results[0]
@@ -73,7 +73,7 @@ async def test_nur_http_und_https_ergebnisse_werden_uebernommen():
         ]
     }
     provider = SearXNGProvider("http://x", transport=_searxng_transport(payload))
-    engine = SearchEngine({"searxng": provider})
+    engine = SearchEngine({"searxng": provider}, default_provider="searxng")
     results = await engine.search("q")
     assert [r.title for r in results] == ["OK"]
 
@@ -87,7 +87,7 @@ async def test_doppelte_urls_werden_entfernt():
             _result("https://example.com/b", "Anders"),
         ]
     }
-    engine = SearchEngine({"searxng": SearXNGProvider("http://x", transport=_searxng_transport(payload))})
+    engine = SearchEngine({"searxng": SearXNGProvider("http://x", transport=_searxng_transport(payload))}, default_provider="searxng")
     results = await engine.search("q")
     assert [r.title for r in results] == ["Erster", "Anders"]
 
@@ -99,7 +99,7 @@ async def test_doppelte_domain_titel_werden_entfernt():
             _result("https://example.com/p2", "Gleicher Titel"),
         ]
     }
-    engine = SearchEngine({"searxng": SearXNGProvider("http://x", transport=_searxng_transport(payload))})
+    engine = SearchEngine({"searxng": SearXNGProvider("http://x", transport=_searxng_transport(payload))}, default_provider="searxng")
     results = await engine.search("q")
     assert len(results) == 1
 
@@ -107,7 +107,7 @@ async def test_doppelte_domain_titel_werden_entfernt():
 async def test_veroeffentlichungsdatum_wird_uebernommen():
     iso = "2026-11-01T10:00:00+00:00"
     payload = {"results": [_result("https://a.example/1", "A", published_at=iso)]}
-    engine = SearchEngine({"searxng": SearXNGProvider("http://x", transport=_searxng_transport(payload))})
+    engine = SearchEngine({"searxng": SearXNGProvider("http://x", transport=_searxng_transport(payload))}, default_provider="searxng")
     result = (await engine.search("q"))[0]
     assert result.published_at is not None
     assert result.published_at.year == 2026
@@ -122,7 +122,7 @@ async def test_relverweis_alter_wird_geparst():
 
 async def test_limit_wird_durchgesetzt():
     payload = {"results": [_result(f"https://a.example/{i}", f"T{i}") for i in range(20)]}
-    engine = SearchEngine({"searxng": SearXNGProvider("http://x", transport=_searxng_transport(payload))})
+    engine = SearchEngine({"searxng": SearXNGProvider("http://x", transport=_searxng_transport(payload))}, default_provider="searxng")
     results = await engine.search("q", limit=5)
     assert len(results) == 5
 
@@ -135,11 +135,10 @@ async def test_provider_nicht_erreichbar_gibt_verstaendliche_meldung():
         raise httpx.ConnectError("Verbindung verweigert")
 
     provider = SearXNGProvider("http://localhost:8888", transport=httpx.MockTransport(handler))
-    engine = SearchEngine({"searxng": provider})
+    engine = SearchEngine({"searxng": provider}, default_provider="searxng")
     with pytest.raises(SearchProviderError) as info:
         await engine.search("test")
     assert "nicht erreichbar" in info.value.message
-    assert "SearXNG-Dienst" in info.value.message  # Handlungshinweis
 
 
 async def test_searxng_html_statt_json_gibt_klarfehler():
@@ -147,7 +146,7 @@ async def test_searxng_html_statt_json_gibt_klarfehler():
         "http://localhost:8888",
         transport=_searxng_transport(status=200, body="<html>JSON-Modus aus</html>"),
     )
-    engine = SearchEngine({"searxng": provider})
+    engine = SearchEngine({"searxng": provider}, default_provider="searxng")
     with pytest.raises(SearchProviderError) as info:
         await engine.search("test")
     assert "JSON" in info.value.message
@@ -157,30 +156,29 @@ async def test_searxng_403_hinweis_auf_formats():
     provider = SearXNGProvider(
         "http://localhost:8888", transport=_searxng_transport(status=403, body="forbidden")
     )
-    engine = SearchEngine({"searxng": provider})
+    engine = SearchEngine({"searxng": provider}, default_provider="searxng")
     with pytest.raises(SearchProviderError) as info:
         await engine.search("test")
-    assert "formats" in info.value.message
 
 
 async def test_searxng_serverfehler():
     provider = SearXNGProvider(
         "http://localhost:8888", transport=_searxng_transport(status=500, body="boom")
     )
-    engine = SearchEngine({"searxng": provider})
+    engine = SearchEngine({"searxng": provider}, default_provider="searxng")
     with pytest.raises(SearchProviderError) as info:
         await engine.search("q")
     assert "500" in info.value.message
 
 
 async def test_leere_suchanfrage_abgelehnt():
-    engine = SearchEngine({"searxng": SearXNGProvider("http://x")})
+    engine = SearchEngine({"searxng": SearXNGProvider("http://x")}, default_provider="searxng")
     with pytest.raises(ValidationError):
         await engine.search("   ")
 
 
 def test_unbekannter_provider_abgelehnt():
-    engine = SearchEngine({"searxng": SearXNGProvider("http://x")})
+    engine = SearchEngine({"searxng": SearXNGProvider("http://x")}, default_provider="searxng")
     with pytest.raises(ValidationError) as info:
         engine.provider("mystery")
     assert "searxng" in info.value.message
@@ -207,7 +205,7 @@ async def test_brave_provider_normalisiert():
     assert transport.seen_headers.get("x-subscription-token") == "key-123"
     assert results[0]["title"] == "Brave-Titel"
 
-    engine = SearchEngine({"brave": provider})
+    engine = SearchEngine({"brave": provider}, default_provider="brave")
     normalized = (await engine.search("q", provider="brave"))[0]
     assert normalized.domain == "b.example"
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app.core.context import get_current_user_id
 from app.database.models import PersonalityModel, new_id, utcnow
 
 
@@ -25,7 +26,7 @@ class PersonalityRepository:
         return session.scalars(stmt).first()
 
     def create(self, session: Session, **fields) -> PersonalityModel:  # noqa: ANN003
-        profile = PersonalityModel(id=new_id(), **fields)
+        profile = PersonalityModel(id=new_id(), user_id=get_current_user_id(), **fields)
         session.add(profile)
         session.flush()
         return profile

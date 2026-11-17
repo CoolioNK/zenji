@@ -38,7 +38,7 @@ def _install_fake_research(app, provider: FakeSearchProvider) -> list[str]:
         )
         return ResearchEngine(
             db=app.state.database,
-            search_engine=SearchEngine({provider.name: provider}),
+            search_engine=SearchEngine({provider.name: provider}, default_provider=provider.name),
             browser=browser,
         )
 
@@ -60,7 +60,7 @@ async def test_web_settings_keinen_api_key_zurueck(client):
     response = await http.get("/api/web/settings")
     assert response.status_code == 200
     data = response.json()
-    assert data["provider"] == "searxng"
+    assert data["provider"] == "duckduckgo"
     assert data["searxng_url"] == "http://localhost:8888"
     assert "brave_api_key" not in data
     assert data["brave_api_key_set"] is False
@@ -93,8 +93,8 @@ async def test_web_status_ist_ehrlich(client):
     assert response.status_code == 200
     data = response.json()
     # SearXNG läuft in der Testumgebung nicht → ehrlich "nicht verfügbar":
-    assert data["provider"] == "searxng"
-    assert data["search"]["available"] is False
+    assert data["provider"] == "duckduckgo"
+    assert data["search"]["available"] is True
     assert data["browser"]["httpx"]["available"] is True
     assert "nicht installiert" in data["browser"]["playwright"]["detail"]
     assert data["planner_modes"] == ["quick", "standard", "deep"]
@@ -106,7 +106,7 @@ async def test_web_suche_mit_fake_provider(client):
         [_result("https://a.example/x", "Titel", "a.example")]
     )
     app.state.web_intelligence._search_engine = (  # type: ignore[method-assign]
-        lambda config: SearchEngine({provider.name: provider})
+        lambda config: SearchEngine({provider.name: provider}, default_provider=provider.name)
     )
     response = await http.post("/api/web/search", json={"query": "python version"})
     assert response.status_code == 200

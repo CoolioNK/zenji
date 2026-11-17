@@ -1,5 +1,6 @@
 /* Zentrale REST-Client-Wrapper für die ZENJI-API. */
 
+import { supabase } from "../lib/supabase";
 import type {
   ApiErrorBody,
   CommunicationModeKey,
@@ -35,6 +36,13 @@ export class ApiError extends Error {
   }
 }
 
+/* Basis-URL der API. Standard: /api (Dev-Proxy bzw. Cloudflare Pages Function). */
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim().replace(/\/$/, "") || "";
+
+function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`;
+}
+
 async function parseError(response: Response): Promise<ApiError> {
   try {
     const body = (await response.json()) as ApiErrorBody;
@@ -48,16 +56,29 @@ async function parseError(response: Response): Promise<ApiError> {
   }
 }
 
+/** Holt das aktuelle Supabase-Access-Token (leer, wenn nicht eingeloggt). */
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(path, { headers: { Accept: "application/json" } });
+  const response = await fetch(apiUrl(path), {
+    headers: { Accept: "application/json", ...(await authHeaders()) },
+  });
   if (!response.ok) throw await parseError(response);
   return (await response.json()) as T;
 }
 
 export async function patchJson<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...(await authHeaders()),
+    },
     body: JSON.stringify(body),
   });
   if (!response.ok) throw await parseError(response);
@@ -65,9 +86,13 @@ export async function patchJson<T>(path: string, body: unknown): Promise<T> {
 }
 
 export async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...(await authHeaders()),
+    },
     body: JSON.stringify(body),
   });
   if (!response.ok) throw await parseError(response);
@@ -75,7 +100,10 @@ export async function postJson<T>(path: string, body: unknown): Promise<T> {
 }
 
 export async function deleteRequest<T = void>(path: string): Promise<T> {
-  const response = await fetch(path, { method: "DELETE", headers: { Accept: "application/json" } });
+  const response = await fetch(apiUrl(path), {
+    method: "DELETE",
+    headers: { Accept: "application/json", ...(await authHeaders()) },
+  });
   if (!response.ok && response.status !== 204) throw await parseError(response);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
@@ -185,9 +213,13 @@ export async function openChatStream(
   mode?: CommunicationModeKey | null,
   research?: string,
 ): Promise<Response> {
-  const response = await fetch("/api/chat/stream", {
+  const response = await fetch(apiUrl("/api/chat/stream"), {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+      ...(await authHeaders()),
+    },
     body: JSON.stringify({
       conversation_id: conversationId ?? undefined,
       message,

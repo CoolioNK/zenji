@@ -38,7 +38,7 @@ export function CoreTab({ activeConversationId }: { activeConversationId: string
             <Row label="Erinnerungen">
               {status ? `${status.memories.active} aktiv · ${status.memories.superseded} veraltet` : "–"}
             </Row>
-            <Row label="Aktives Modell">{status?.model ?? "–"}</Row>
+            <Row label="Aktives Modell">Zenji Ango</Row>
             <Row label="Provider">{status?.provider ?? "–"}</Row>
             <Row label="Kontextfenster">
               {status ? `${status.num_ctx} Tokens (max. Ausgabe ${status.num_predict})` : "–"}

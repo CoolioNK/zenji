@@ -21,10 +21,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
 from app.api.routes import api_router
+from app.core.auth import SupabaseAuth, SupabaseAuthMiddleware
 from app.core.config import Settings
 from app.core.exceptions import ValidationError, ZenjiError
 from app.core.extensions import ExtensionRegistry
 from app.core.logging import get_logger, setup_logging
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.storage import StorageManager
 from app.database.database import Database
 from app.database.migrations import run_migrations
@@ -65,24 +67,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     log.info("ZENJI Backend v%s startet …", __version__)
 
     storage: StorageManager = state.storage
-    status = storage.status()
-    if status.available:
-        try:
-            storage.ensure_structure()
-        except ZenjiError as exc:
-            log.warning("%s", exc.message)
-    log.warning("%s", status.message) if not status.available else log.info(
-        "Speicherort: %s", status.root
-    )
+    # In Supabase liegt der Speicher in der Cloud – die lokale SSD ist dann
+    # nicht erforderlich.
+    if not settings.supabase_enabled:
+        status = storage.status()
+        if status.available:
+            try:
+                storage.ensure_structure()
+            except ZenjiError as exc:
+                log.warning("%s", exc.message)
+        log.warning("%s", status.message) if not status.available else log.info(
+            "Speicherort: %s", status.root
+        )
 
     database: Database = state.database
     try:
         database.create_schema()
         # Phase 2: Migrationen (Schema-Stufen) und Suchindex initialisieren.
         version = run_migrations(database.engine)
-        log.info("Datenbank bereit (Schema-Stufe %d): %s", version, database.db_path)
+        log.info(
+            "Datenbank bereit (Schema-Stufe %d): %s",
+            version,
+            "Supabase/Postgres" if settings.supabase_enabled else database.db_path,
+        )
         memory_engine: MemoryEngine = state.memory_engine
-        with database.session() as session:
+        with database.admin_session() as session:
             memory_engine.init_search(session)
     except ZenjiError as exc:
         log.warning("Datenbank nicht verfügbar: %s", exc.message)
@@ -151,6 +160,20 @@ def create_app(
         lifespan=lifespan,
     )
 
+    # Supabase-Auth aktiv, sobald konfiguriert: prüft Tokens, setzt den
+    # Nutzer-Kontext und erzwingt so die Trennung der Accounts (RLS).
+    supabase_auth = SupabaseAuth(settings)
+    app.state.supabase_auth = supabase_auth
+    if settings.supabase_enabled:
+        app.add_middleware(
+            SupabaseAuthMiddleware,
+            settings=settings,
+            database=database,
+            auth=supabase_auth,
+        )
+
+    # Middleware-Reihenfolge (inner → outer): Auth → CORS → Security Headers.
+    # So tragen auch 401-Antworten der Auth-Middleware CORS-Header.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
@@ -158,6 +181,7 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # Komponenten an app.state hängen (DI via app.api.deps).
     app.state.settings = settings
@@ -174,10 +198,17 @@ def create_app(
     app.state.zenji_core = zenji_core
     app.state.web_intelligence = web_intelligence
 
-    provider_config = {
-        "base_url": settings.ollama_base_url,
-        **settings.ollama.model_dump(),
-    }
+    if settings.llm.provider == "cloudflare":
+        provider_config: dict[str, Any] = {
+            "account_id": settings.cloudflare_account_id,
+            "api_token": settings.cloudflare_api_token,
+            **settings.cloudflare.model_dump(),
+        }
+    else:  # ollama (Standard)
+        provider_config = {
+            "base_url": settings.ollama_base_url,
+            **settings.ollama.model_dump(),
+        }
     provider = factory(settings.llm.provider, provider_config)
     engine = LLMEngine(provider)
     chat_service = ChatService(

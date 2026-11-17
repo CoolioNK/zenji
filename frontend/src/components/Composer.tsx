@@ -1,25 +1,8 @@
-/* Eingabebereich: autoskalierendes Textfeld, Senden/Stopp + Moduswahl (v0.3.0)
-   + Recherche-Steuerung (v0.5.0). */
+/* High-End Zenji Composer im minimalistisch-japanischen Design-System */
 
-import { useEffect, useRef, useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import { Send, Square } from "lucide-react";
 import type { CommunicationModeKey, ResearchMode } from "../types";
-
-const MODE_OPTIONS: { value: CommunicationModeKey | ""; label: string }[] = [
-  { value: "", label: "Modus: Auto" },
-  { value: "casual", label: "Casual" },
-  { value: "roast", label: "Roast" },
-  { value: "focus", label: "Fokus" },
-  { value: "empathy", label: "Empathie" },
-  { value: "open_talk", label: "Open Talk" },
-];
-
-const RESEARCH_OPTIONS: { value: ResearchMode; label: string; title: string }[] = [
-  { value: "auto", label: "Web: Auto", title: "Recherche-Bedarf wird automatisch erkannt" },
-  { value: "off", label: "Web: Aus", title: "Keine Internet-Recherche für diese Nachricht" },
-  { value: "quick", label: "Web: Schnell", title: "Recherche erzwingen (1 Suchanfrage)" },
-  { value: "standard", label: "Web: Standard", title: "Recherche erzwingen (ausgewogen)" },
-  { value: "deep", label: "Web: Tief", title: "Recherche erzwingen (umfassend)" },
-];
 
 export function Composer({
   disabled,
@@ -27,37 +10,43 @@ export function Composer({
   onSend,
   onStop,
   research = "auto",
-  onResearchChange,
 }: {
   disabled?: boolean;
   streaming: boolean;
   onSend: (text: string, mode: CommunicationModeKey | null, research: ResearchMode) => void;
   onStop: () => void;
   research?: ResearchMode;
-  onResearchChange?: (mode: ResearchMode) => void;
 }) {
   const [value, setValue] = useState("");
-  const [mode, setMode] = useState<CommunicationModeKey | "">("");
-  const [researchMode, setResearchMode] = useState<ResearchMode>(research);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  /* Externe Änderung (ChatPage) übernehmen: */
+  // Automatische Anpassung der Textarea-Höhe
   useEffect(() => {
-    setResearchMode(research);
-  }, [research]);
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [value]);
 
   const submit = () => {
     const text = value.trim();
     if (!text || disabled || streaming) return;
-    onSend(text, mode === "" ? null : mode, researchMode);
+    // Modus und Recherche laufen automatisch; keine manuellen Dropdowns mehr.
+    onSend(text, null, research);
     setValue("");
-    textareaRef.current?.focus();
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.focus();
+    }
   };
 
+  const hasText = value.trim().length > 0;
+
   return (
-    <div className="border-t border-ink-700 bg-ink-900 px-6 py-4">
-      <div className="mx-auto flex max-w-3xl items-end gap-2">
-        <div className="flex-1 rounded-2xl border border-ink-600 bg-ink-850 transition-colors focus-within:border-jade-600">
+    <div className="relative px-4 pb-6 pt-2 bg-transparent pointer-events-none">
+      <div className="mx-auto max-w-3xl pointer-events-auto">
+        {/* Haupt-Eingabecontainer im fließenden Zenji-Design */}
+        <div className="relative rounded-2xl border border-border/80 bg-card/85 shadow-2xl backdrop-blur-xl transition-all duration-300 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20 focus-within:bg-card p-3 md:p-3.5">
           <textarea
             ref={textareaRef}
             rows={1}
@@ -69,61 +58,52 @@ export function Composer({
                 submit();
               }
             }}
-            placeholder="Nachricht an ZENJI …  (Enter senden, Shift+Enter neue Zeile)"
+            placeholder="Frag Zenji etwas oder gib einen Gedanken ein …"
             disabled={disabled}
-            className="max-h-[180px] w-full resize-none bg-transparent px-4 py-3 text-[14px] leading-relaxed text-ink-50 outline-none placeholder:text-ink-400 disabled:opacity-60"
+            className="w-full resize-none bg-transparent px-2 pt-1 pb-2 text-[14px] leading-relaxed text-foreground placeholder:text-muted-foreground/50 outline-none disabled:opacity-50 font-sans max-h-[200px]"
           />
+
+          {/* Nahtlose untere Status- & Aktionsleiste ohne harte Trennlinie */}
+          <div className="flex items-center justify-between pt-1 px-1">
+            {/* Linke Seite: Zenji-Identität */}
+            <div className="inline-flex items-center gap-2 select-none">
+              <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/50 px-3 py-1 text-xs font-mono text-muted-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse-dot" />
+                <span className="text-foreground font-medium">Zenji Ango</span>
+              </span>
+            </div>
+
+            {/* Rechte Seite: Shortcut & runder Send-Button */}
+            <div className="flex items-center gap-2.5">
+              <span className="hidden sm:inline font-mono text-[10px] text-muted-foreground/40 select-none">
+                ↵ senden · ⇧↵ Zeile
+              </span>
+
+              {streaming ? (
+                <button
+                  onClick={onStop}
+                  title="Generierung stoppen"
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-signal-red/80 bg-card text-signal-red hover:bg-signal-red hover:text-white transition-all shadow-sm active:scale-95 cursor-pointer"
+                >
+                  <Square className="h-3 w-3 fill-current" />
+                </button>
+              ) : (
+                <button
+                  onClick={submit}
+                  disabled={disabled || !hasText}
+                  title="Senden (Enter)"
+                  className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 active:scale-95 shadow-sm ${
+                    hasText
+                      ? "bg-accent text-white hover:bg-accent/90 hover:scale-105 shadow-md shadow-accent/25 cursor-pointer"
+                      : "bg-muted/70 text-muted-foreground/30 cursor-not-allowed"
+                  }`}
+                >
+                  <Send className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
-        <select
-          value={mode}
-          onChange={(e) => setMode(e.target.value as CommunicationModeKey | "")}
-          title="Kommunikationsmodus für die nächste Nachricht (leer = automatisch)"
-          className="h-11 shrink-0 rounded-xl border border-ink-600 bg-ink-850 px-2 text-[12px] text-ink-200 outline-none transition-colors hover:border-jade-600 focus:border-jade-600"
-        >
-          {MODE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        {onResearchChange && (
-          <select
-            value={researchMode}
-            onChange={(e) => {
-              const next = e.target.value as ResearchMode;
-              setResearchMode(next);
-              onResearchChange(next);
-            }}
-            title="Internet-Recherche für die nächste Nachricht (Auto erkennt den Bedarf)"
-            className="h-11 shrink-0 rounded-xl border border-ink-600 bg-ink-850 px-2 text-[12px] text-ink-200 outline-none transition-colors hover:border-jade-600 focus:border-jade-600"
-          >
-            {RESEARCH_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value} title={option.title}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        )}
-        {streaming ? (
-          <button
-            onClick={onStop}
-            title="Generierung abbrechen"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-ink-600 bg-ink-800 text-ink-200 transition-colors hover:border-signal-red hover:text-signal-red"
-          >
-            <span className="block h-3.5 w-3.5 rounded-[3px] bg-current" />
-          </button>
-        ) : (
-          <button
-            onClick={submit}
-            disabled={disabled || !value.trim()}
-            title="Senden"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-jade-600 text-ink-950 transition-colors hover:bg-jade-500 disabled:cursor-not-allowed disabled:bg-ink-700 disabled:text-ink-400"
-          >
-            <svg viewBox="0 0 20 20" className="h-4.5 w-4.5" fill="currentColor" aria-hidden="true">
-              <path d="M3 10 17 3l-4.2 14L9.6 11 3 10Z" />
-            </svg>
-          </button>
-        )}
       </div>
     </div>
   );

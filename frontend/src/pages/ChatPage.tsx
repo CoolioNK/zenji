@@ -1,11 +1,11 @@
-/* Seitenlayout: Sidebar + Chatbereich + Control Center + Einstellungen-Schublade.
-   v0.5.0: Recherche-Modus-Auswahl und Live-Panel-Verkabelung. */
+/* Seitenlayout: Einklappbare Sidebar + Chatbereich mit Top-Header + Command Palette + Control Center + Einstellungen. */
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { ChatArea } from "../components/ChatArea";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { Sidebar } from "../components/Sidebar";
 import { ControlCenter } from "../components/control/ControlCenter";
+import { CommandPalette } from "../components/CommandPalette";
 import { useChat } from "../hooks/useChat";
 import { useConversations } from "../hooks/useConversations";
 import { useHealth } from "../hooks/useHealth";
@@ -16,7 +16,12 @@ export function ChatPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [controlOpen, setControlOpen] = useState(false);
-  const [researchMode, setResearchMode] = useState<ResearchMode>("auto");
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  // Recherche läuft automatisch; kein manueller Web-Umschalter mehr.
+  const researchMode: ResearchMode = "auto";
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem("zenji-sidebar-collapsed") === "true";
+  });
 
   const health = useHealth();
   const { conversations, error: conversationsError, refresh, rename, remove } = useConversations();
@@ -30,10 +35,18 @@ export function ChatPage() {
     [refresh],
   );
 
-  const { messages, status, error, send, stop, researchEvents, researchSummary } = useChat(
+  const { messages, status, error, send, stop } = useChat(
     activeId,
     handleConversationCreated,
   );
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem("zenji-sidebar-collapsed", String(next));
+      return next;
+    });
+  }, []);
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -43,10 +56,10 @@ export function ChatPage() {
     [remove, activeId],
   );
 
-  const handleNewChat = () => {
+  const handleNewChat = useCallback(() => {
     stop();
     setActiveId(null);
-  };
+  }, [stop]);
 
   const handleSaveSettings = useCallback(
     async (patch: Record<string, unknown>) => {
@@ -56,13 +69,37 @@ export function ChatPage() {
     [settings, refresh],
   );
 
+  // Globale Tastenkombinationen (Cmd+K: Palette, Cmd+B: Sidebar, Cmd+N: Neuer Chat)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+      if (isCmdOrCtrl && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        toggleSidebar();
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        handleNewChat();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [toggleSidebar, handleNewChat]);
+
+  const activeConversation = conversations.find((c) => c.id === activeId);
+
   return (
-    <div className="flex h-full bg-ink-900 text-ink-100">
+    <div className="flex h-full w-full bg-background text-foreground overflow-hidden font-sans selection:bg-accent selection:text-white">
       <Sidebar
         conversations={conversations}
         conversationsError={conversationsError}
         activeId={activeId}
         health={health}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebar}
         onSelect={(id) => {
           stop();
           setActiveId(id);
@@ -75,6 +112,7 @@ export function ChatPage() {
         onDelete={handleDelete}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenControl={() => setControlOpen(true)}
+        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
       />
 
       <ChatArea
@@ -84,10 +122,11 @@ export function ChatPage() {
         health={health}
         onSend={(text, mode, research) => void send(text, mode, research ?? researchMode)}
         onStop={stop}
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleSidebar={toggleSidebar}
+        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        activeConversationTitle={activeConversation?.title}
         researchMode={researchMode}
-        onResearchModeChange={setResearchMode}
-        researchEvents={researchEvents}
-        researchSummary={researchSummary}
       />
 
       <SettingsPanel
@@ -104,6 +143,21 @@ export function ChatPage() {
         open={controlOpen}
         activeConversationId={activeId}
         onClose={() => setControlOpen(false)}
+      />
+
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        conversations={conversations}
+        onSelectConversation={(id) => {
+          stop();
+          setActiveId(id);
+        }}
+        onNewChat={handleNewChat}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenControl={() => setControlOpen(true)}
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleSidebar={toggleSidebar}
       />
     </div>
   );

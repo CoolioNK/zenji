@@ -7,8 +7,9 @@ eine feste Antwort liefert, ist die Verifizierung auf Prompt-/Instruktionsebene
 (siehe Limitationen im Entwicklungsbericht); das Live-Verhalten wurde
 zusätzlich manuell gegen Qwen3 8B geprüft.
 
-Abgedeckte Verhaltensziele der Spezifikation:
-1 informal, 2 Kraftausdrücke, 3 Witze/Roasts, 4 intime Themen, 5 Widerspruch,
+Abgedeckte Verhaltensziele:
+1 freundlich/klar im Standardmodus, 2 keine Beleidigungen ohne Frech-Modus,
+3 dezenten Humor, 4 intime Themen, 5 respektvoller Widerspruch,
 6 Moduswechsel, 9 ernste Situation → Empathie, 10 Bestand bleibt funktional.
 """
 
@@ -82,31 +83,31 @@ def harness(tmp_path):
 # --- Grundton: informell, humorvoll, kein Corporate-Sprech --------------------------
 
 
-async def test_standard_modus_ist_casual_und_informell(harness):
+async def test_standard_modus_ist_freundlich_und_klar(harness):
     await harness.chat("Moin! Was geht bei dir heute so?")
     system = harness.last_system
     assert "## Kommunikationsmodus" in system
-    assert "Casual" in system
-    assert "locker, freundlich und humorvoll" in system
-    assert "Kein Berichterton" in system
+    assert "Aktuell: Freundlich" in system
+    assert "freundlich, klar und hilfreich" in system
+    assert "kein Berichterton" in system
     # Persönlichkeit bleibt voll erhalten:
     assert "Name: Zenji" in system
-    assert "Humor: sehr stark" in system
+    assert "Humor: mittel" in system
 
 
-async def test_kraftausdruecke_und_schwarzer_humor_erlaubt(harness):
+async def test_normal_modus_verlangt_keine_beleidigungen(harness):
     await harness.chat("Du kannst ruhig Scheiße sagen, ich bin nicht aus Zucker.")
     system = harness.last_system
-    # Systemregel communication_freedom gibt es freigegeben:
-    assert "Kraftausdrücke" in system
-    assert "schwarzer Humor" in system
-    assert "Kein Corporate-Sprech" in system
+    assert "Aktuell: Freundlich" in system
+    assert "keine Beleidigungen" in system
+    assert "Frech-/Roast-Modus" in system
 
 
-async def test_jokes_und_roasts_sind_verankert(harness):
+async def test_humor_ist_im_normalmodus_dezent(harness):
     await harness.chat("Erzähl mir einen richtig dummen Witz über Programmierer.")
     system = harness.last_system
-    assert "freches Necken" in system  # Roast/Erlaubnis aus communication_freedom
+    assert "dezentem Humor" in system
+    assert "Frech-/Roast-Modus" in system
 
 
 # --- Intime & kontrovers Themen -----------------------------------------------------
@@ -126,41 +127,45 @@ async def test_kontroverse_meinung_und_widerspruch_erlaubt(harness):
     await harness.chat("Sag mal ehrlich deine Meinung, ohne Rücksicht auf Verluste.")
     system = harness.last_system
     assert "eigene, begründete Meinungen" in system
-    assert "Widersprich dem Nutzer" in system
+    assert "widersprich respektvoll" in system
     assert "Zustimmung nur zum Gefallen" in system
 
 
 # --- Beleidigungs-Banter (v0.4.0) ----------------------------------------------------
 
 
-async def test_beleidigung_loest_gegenfeuer_roast_aus(harness):
-    """Nutzer beleidigt ZENJI → Gegenfeuer: Roast-Modus mit Rückzuschlag-Auftrag."""
+async def test_beleidigung_bleibt_im_normalmodus_freundlich(harness):
+    """Ein normaler Fluch oder eine Beleidigung des Nutzers aktiviert nicht automatisch Roast."""
     await harness.chat("Du bist echt ein Hurensohn, ZENJI.")
     system = harness.last_system
     assert "## Kommunikationsmodus" in system
-    assert "Roast" in system
-    assert "gleicher Härte" in system  # Gegenfeuer in Direktive und Regel
-    # Neue Systemregel insult_banter sitzt im Prompt:
-    assert "[P94|kommunikation]" in system
-    assert "Beleidigungen wie Hurensohn, Arschloch, Wichser" in system
+    assert "Aktuell: Freundlich" in system
+    assert "Aktuell: Frech" not in system
+    assert "keine Beleidigungen" in system
 
 
-async def test_beleidigungs_aufforderung_aktiviert_roast(harness):
+async def test_beleidigungs_aufforderung_ohne_modus_bleibt_freundlich(harness):
     await harness.chat("Beleidige mich mal richtig, ich kann das ab.")
     system = harness.last_system
-    assert "Roast" in system
-    assert "Hurensohn, Arschloch, Wichser und Schlimmeres" in system
-    # Grenzen bleiben im Prompt sichtbar:
-    assert "Gewaltandrohungen bleiben verboten" in system
+    assert "Aktuell: Freundlich" in system
+    assert "Aktuell: Frech" not in system
 
 
-async def test_negierte_beleidigung_bleibt_casual(harness):
+async def test_expliziter_frech_modus_aktiviert_roast(harness):
+    await harness.chat("Wechsle in den Frech-Modus und beleidige mich kreativ.")
+    system = harness.last_system
+    assert "Aktuell: Frech" in system
+    assert "sarkastisch" in system
+    assert "Respektiere Grenzen" in system
+
+
+async def test_negierte_beleidigung_bleibt_freundlich(harness):
     await harness.chat(
         "Erklär mir async in Python, aber beleidige mich nicht dabei."
     )
     system = harness.last_system
-    assert "Casual" in system
-    assert "guten Freund" in system  # Casual-Direktive aktiv
+    assert "Aktuell: Freundlich" in system
+    assert "freundlich, klar und hilfreich" in system
 
 
 # --- Situationswechsel im Gespräch ----------------------------------------------------
@@ -183,9 +188,9 @@ async def test_technische_frage_loest_fokus_aus(harness):
 
 
 async def test_moduswechsel_in_der_gleichen_konversation(harness):
-    """Casual → Fokus → Roast: jede Nachricht bekommt ihren Modus, Profil bleibt."""
+    """Freundlich → Fokus → Frech: jede Nachricht bekommt ihren Modus, Profil bleibt."""
     conversation_id = await harness.chat("Hey, alles klar bei dir?")
-    assert "Casual" in harness.last_system
+    assert "Aktuell: Freundlich" in harness.last_system
 
     await harness.service.send_message(
         ChatRequest(
@@ -193,7 +198,7 @@ async def test_moduswechsel_in_der_gleichen_konversation(harness):
             message="Okay, jetzt konkret: Erkläre mir die SQL-Syntax von Fensterfunktionen.",
         )
     )
-    assert "Fokus" in harness.last_system
+    assert "Aktuell: Fokus" in harness.last_system
 
     await harness.service.send_message(
         ChatRequest(
@@ -202,24 +207,24 @@ async def test_moduswechsel_in_der_gleichen_konversation(harness):
         )
     )
     roast_system = harness.last_system
-    assert "Roast" in roast_system
+    assert "Aktuell: Frech" in roast_system
     assert "sarkastisch" in roast_system
     # Identität/Persönlichkeit in jeder Runde unverändert:
     assert "Name: Zenji" in roast_system
-    assert "Humor: sehr stark" in roast_system
+    assert "Humor: mittel" in roast_system
 
 
 async def test_manueller_override_schlaegt_automatik(harness):
-    """User sagt 'Roast-Modus an' zu einer traurigen Nachricht → Roast gewinnt."""
+    """User sagt 'Roast-Modus an' zu einer traurigen Nachricht → Frech gewinnt."""
     await harness.chat("Mir geht's dreckig. Aber Roast-Modus an, dann lacht wenigstens einer.")
-    assert "Roast" in harness.last_system
+    assert "Aktuell: Frech" in harness.last_system
 
 
 async def test_manuelles_mode_feld_im_request(harness):
     """ChatRequest.mode erzwingt den Modus unabhängig vom Nachrichtentext."""
     await harness.chat("Wie funktioniert ein Verbrennungsmotor?", mode="roast")
     system = harness.last_system
-    assert "Roast" in system
+    assert "Aktuell: Frech" in system
     assert "sarkastisch" in system
 
 

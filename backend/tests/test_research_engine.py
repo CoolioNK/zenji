@@ -71,7 +71,7 @@ def _make_engine(db: Database, provider: FakeSearchProvider, pages: dict[str, st
         per_host_delay=0.0,
         resolver=lambda host: ("93.184.216.34",),
     )
-    search = SearchEngine({provider.name: provider})
+    search = SearchEngine({provider.name: provider}, default_provider=provider.name)
     return ResearchEngine(
         db=db,
         search_engine=search,

@@ -26,6 +26,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.context import scope_entity_id
 from app.core.exceptions import (
     PolicyIdTakenError,
     PolicyNotFoundError,
@@ -118,7 +119,7 @@ class PolicyEngine(ZenjiEngine):
         if not instruction:
             raise ValidationError("Regeltext (instruction) ist erforderlich.")
         policy_id = str(fields.get("id") or "").strip() or self.slugify(name)
-        if self._repo.get(session, policy_id) is not None:
+        if self._repo.get(session, scope_entity_id(policy_id)) is not None:
             raise PolicyIdTakenError(f"Regel-ID '{policy_id}' ist bereits vergeben.")
         priority = int(fields.get("priority", 50))
         if fields.get("source") == "system":

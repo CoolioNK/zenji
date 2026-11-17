@@ -1,8 +1,11 @@
 """Search Engine – flexible Suchmaschinen-Abstraktion (Phase 3).
 
 Provider-Architektur: Die Engine kennt nur das :class:`SearchProvider`-
-Protokoll; konkrete Anbieter (SearXNG, Brave Search API) registrieren sich
-daran. Alle Ergebnisse werden in ein einheitliches internes Format
+Protokoll; konkrete Anbieter (DuckDuckGo, SearXNG, Brave Search API)
+registrieren sich daran. DuckDuckGo ist der Standard-Provider und
+funktioniert ohne lokale Installation oder API-Key.
+
+Alle Ergebnisse werden in ein einheitliches internes Format
 (:class:`SearchResult`) normalisiert: Titel, URL, Domain, Snippet,
 Veröffentlichungsdatum (falls verfügbar), Suchanfrage, Provider,
 Abrufzeitpunkt.
@@ -21,6 +24,7 @@ Sicherheit/Robustheit:
 
 from __future__ import annotations
 
+import html
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -154,6 +158,177 @@ def parse_published(raw: Any) -> datetime | None:
     return None
 
 
+class DuckDuckGoProvider:
+    """DuckDuckGo-Suchanbieter – funktioniert ohne API-Key oder lokale Installation.
+
+    Nutzt die DuckDuckGo Instant Answer API (JSON) sowie HTML-Suche mit
+    robuster Extraktion. Kein lokaler Dienst nötig, kein API-Key.
+    """
+
+    name = "duckduckgo"
+
+    def __init__(
+        self,
+        *,
+        timeout: float = DEFAULT_SEARCH_TIMEOUT_S,
+        language: str = "de",
+        transport: httpx.AsyncTransport | None = None,
+    ) -> None:
+        self.timeout = timeout
+        self.language = language
+        self._transport = transport
+
+    async def search(self, query: str, *, limit: int) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+
+        # 1. Instant Answer API (schnell, JSON, aber begrenzt)
+        results.extend(await self._instant_answers(query, limit))
+
+        # 2. Falls zu wenige Ergebnisse, HTML-Suche als Fallback
+        if len(results) < limit:
+            results.extend(await self._html_search(query, limit - len(results)))
+
+        return results[:limit]
+
+    async def _instant_answers(
+        self, query: str, limit: int
+    ) -> list[dict[str, Any]]:
+        """DuckDuckGo Instant Answer API (JSON)."""
+        results: list[dict[str, Any]] = []
+        region = f"{self.language}-{self.language.upper()}"
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+        }
+        try:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                transport=self._transport,
+                follow_redirects=True,
+                headers=headers,
+            ) as client:
+                resp = await client.get(
+                    "https://api.duckduckgo.com/",
+                    params={"q": query, "format": "json", "region": region},
+                )
+                if resp.status_code != 200:
+                    return results
+                data = resp.json()
+
+                # Abstract + URL als Ergebnis
+                abstract = data.get("Abstract", "")
+                abstract_url = data.get("AbstractURL", "")
+                if abstract and abstract_url:
+                    results.append({
+                        "title": data.get("Heading", ""),
+                        "url": abstract_url,
+                        "snippet": abstract,
+                    })
+
+                # Related Topics
+                for topic in data.get("RelatedTopics", []) or []:
+                    if isinstance(topic, dict) and "FirstURL" in topic:
+                        results.append({
+                            "title": topic.get("Text", ""),
+                            "url": topic.get("FirstURL", ""),
+                            "snippet": topic.get("Text", ""),
+                        })
+                    # Nested topics
+                    for sub in topic.get("Topics", []) or []:
+                        if isinstance(sub, dict) and "FirstURL" in sub:
+                            results.append({
+                                "title": sub.get("Text", ""),
+                                "url": sub.get("FirstURL", ""),
+                                "snippet": sub.get("Text", ""),
+                            })
+        except (httpx.HTTPError, ValueError):
+            pass
+
+        # Dedupliziere nach URL
+        seen: set[str] = set()
+        unique: list[dict[str, Any]] = []
+        for r in results:
+            url = r.get("url", "")
+            if url and url not in seen:
+                seen.add(url)
+                unique.append(r)
+        return unique[:limit]
+
+    async def _html_search(
+        self, query: str, limit: int
+    ) -> list[dict[str, Any]]:
+        """DuckDuckGo HTML-Suche mit robuster Extraktion als Fallback."""
+        results: list[dict[str, Any]] = []
+        region = f"{self.language}-{self.language.upper()}"
+        headers = {
+            "Accept": "text/html,application/xhtml+xml",
+            "Accept-Language": f"{self.language},{self.language[:2]};q=0.9,en;q=0.8",
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+        }
+        try:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                transport=self._transport,
+                follow_redirects=True,
+                headers=headers,
+            ) as client:
+                resp = await client.get(
+                    "https://html.duckduckgo.com/html/",
+                    params={"q": query, "region": region},
+                )
+                if resp.status_code != 200:
+                    return results
+                text = resp.text
+
+                # Extrahiere Ergebnisse aus <a class="result__a">...</a> Blöcken
+                # DuckDuckGo HTML verwendet <a class="result__a" data-url="...">
+                url_pattern = re.compile(
+                    r'<a\s+class="result__a"[^>]*data-url="([^"]*)"[^>]*>(.*?)</a>',
+                    re.DOTALL,
+                )
+                snippet_pattern = re.compile(
+                    r'<a\s+class="result__snippet"[^>]*>(.*?)</a>',
+                    re.DOTALL,
+                )
+
+                urls = url_pattern.findall(text)
+                snippets = snippet_pattern.findall(text)
+
+                for i, (raw_url, raw_title) in enumerate(urls):
+                    if not raw_url.startswith(("http://", "https://")):
+                        continue
+                    title = html.unescape(" ".join(raw_title.split()))
+                    snippet = ""
+                    if i < len(snippets):
+                        snippet = html.unescape(" ".join(snippets[i].split()))
+                    results.append({
+                        "title": title or "",
+                        "url": raw_url,
+                        "snippet": snippet,
+                    })
+                    if len(results) >= limit:
+                        break
+        except (httpx.HTTPError, ValueError):
+            pass
+
+        return results[:limit]
+
+    async def status(self) -> dict[str, Any]:
+        try:
+            r = await self.search("test", limit=1)
+            return {"available": True, "detail": "DuckDuckGo verbunden."}
+        except SearchProviderError as exc:
+            return {"available": False, "detail": exc.message}
+
+
 class SearXNGProvider:
     """Suchanbieter für eine **lokale** SearXNG-Instanz (JSON-API).
 
@@ -193,7 +368,7 @@ class SearXNGProvider:
         except httpx.HTTPError as exc:
             raise SearchProviderError(
                 f"Suchanbieter SearXNG ist nicht erreichbar unter {self.base_url}. "
-                "Prüfe, ob der lokale SearXNG-Dienst läuft (z. B. via Docker).",
+                "Prüfe, ob der lokale SearXNG-Dienst läuft.",
                 detail={"base_url": self.base_url, "reason": type(exc).__name__},
             ) from exc
         if response.status_code == 403:
@@ -301,7 +476,7 @@ class SearchEngine:
         self,
         providers: dict[str, SearchProvider],
         *,
-        default_provider: str = "searxng",
+        default_provider: str = "duckduckgo",
     ) -> None:
         self._providers = providers
         self._default = default_provider
@@ -426,6 +601,7 @@ def merge_results(*batches: list[SearchResult], limit: int = 50) -> list[SearchR
 
 __all__ = [
     "BraveProvider",
+    "DuckDuckGoProvider",
     "MAX_RESULTS_PER_QUERY",
     "MAX_SEARCH_RESPONSE_BYTES",
     "SearchEngine",

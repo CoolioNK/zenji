@@ -2,8 +2,8 @@
 
 Unterscheidung:
 
-- ``LLMSettings``          – allgemeine ZENJI-Parameter (modellunabhängig)
-- ``OllamaProviderSettings`` – provider-spezifische Parameter (Ollama)
+- ``LLMSettings``          – allgemeine Sprachmodell-Parameter (nur Temperature für Nutzer)
+- ``OllamaProviderSettings`` – provider-spezifische Parameter (Backend, nicht in UI)
 - ``PersonaSettings``      – Persönlichkeit / Verhaltensrichtlinien
 """
 
@@ -29,7 +29,7 @@ class LLMSettings(BaseModel):
 
 
 class OllamaProviderSettings(BaseModel):
-    """Provider-spezifische Parameter für Ollama."""
+    """Provider-spezifische Parameter für Ollama (Backend, nicht in UI)."""
 
     model_config = ConfigDict(protected_namespaces=())
 
@@ -42,7 +42,7 @@ class OllamaProviderSettings(BaseModel):
 
 
 class PersonaSettings(BaseModel):
-    """Persönlichkeit und Verhaltensrichtlinien von ZENJI."""
+    """Persönlichkeit und Verhaltensrichtlinien von Zenji Ango."""
 
     model_config = ConfigDict(protected_namespaces=())
 
@@ -68,50 +68,21 @@ class ProvidersGroup(BaseModel):
 
 
 class SettingsPatch(BaseModel):
-    """Teilweise Änderung der Einstellungen (Deep-Merge je Gruppe)."""
+    """Teilweise Änderung der Einstellungen (Deep-Merge je Gruppe).
+    Nur temperature und system_prompt sind über die UI änderbar."""
 
     model_config = ConfigDict(protected_namespaces=())
 
     llm: LLMSettingsPartial | None = None
-    providers: ProvidersPatch | None = None
     persona: PersonaSettingsPartial | None = None
 
 
 class LLMSettingsPartial(BaseModel):
-    """Teilweise änderbare allgemeine Parameter."""
+    """Nur Temperature ist über die UI änderbar."""
 
     model_config = ConfigDict(protected_namespaces=(), extra="forbid")
 
-    provider: str | None = Field(default=None, min_length=1)
-    model: str | None = Field(default=None, min_length=1)
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
-    top_p: float | None = Field(default=None, gt=0.0, le=1.0)
-    top_k: int | None = Field(default=None, ge=1, le=200)
-    repeat_penalty: float | None = Field(default=None, ge=0.5, le=2.0)
-    num_predict: int | None = Field(default=None, ge=1, le=32768)
-    num_ctx: int | None = Field(default=None, ge=512, le=131072)
-    stream: bool | None = None
-
-
-class ProvidersPatch(BaseModel):
-    """Teilweise änderbare Provider-Parameter."""
-
-    model_config = ConfigDict(protected_namespaces=(), extra="forbid")
-
-    ollama: OllamaProviderSettingsPartial | None = None
-
-
-class OllamaProviderSettingsPartial(BaseModel):
-    """Teilweise änderbare Ollama-Parameter."""
-
-    model_config = ConfigDict(protected_namespaces=(), extra="forbid")
-
-    base_url: str | None = Field(default=None, pattern=r"^https?://")
-    timeout: float | None = Field(default=None, ge=1.0, le=3600.0)
-    connect_timeout: float | None = Field(default=None, ge=0.5, le=60.0)
-    keep_alive: str | None = Field(default=None, min_length=1, max_length=20)
-    think: bool | None = None
-    strip_think: bool | None = None
 
 
 class PersonaSettingsPartial(BaseModel):

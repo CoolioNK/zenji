@@ -1,29 +1,30 @@
-/* ZENJI-Wortmarke mit Enso-Zeichen. */
+/* Offizielles ZENJI-Markenzeichen mit Kreis-Emblem und japanisch-inspirierter Editorial-Typografie. */
+
+import symbolLogo from "../assets/zenji-symbol.png";
 
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex items-center gap-3 select-none">
-      <svg viewBox="0 0 64 64" className="h-7 w-7 shrink-0" aria-hidden="true">
-        <circle
-          cx="32"
-          cy="32"
-          r="24"
-          fill="none"
-          stroke="#46b592"
-          strokeWidth="5"
-          strokeLinecap="round"
-          strokeDasharray="132 20"
-          transform="rotate(-70 32 32)"
+    <div className="flex items-center gap-3 select-none group cursor-pointer">
+      {/* Das präzise Kreis-Emblem */}
+      <div className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border/80 bg-background transition-transform duration-700 group-hover:rotate-[360deg] shadow-sm">
+        <img
+          src={symbolLogo}
+          alt="Zenji"
+          className="h-full w-full object-contain p-0.5"
         />
-      </svg>
+      </div>
+
       {!compact && (
-        <div className="leading-none">
-          <div className="text-[17px] font-semibold tracking-[0.28em] text-ink-50">
-            ZENJI
+        <div className="flex flex-col leading-tight">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold tracking-[0.28em] text-foreground transition-colors group-hover:text-accent">
+              ZENJI
+            </span>
+            <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse-dot" />
           </div>
-          <div className="mt-1 text-[10px] tracking-[0.18em] text-ink-400 uppercase">
-            Lokales KI-System
-          </div>
+          <span className="text-[9px] font-mono tracking-widest text-muted-foreground uppercase mt-0.5">
+            Independent AI
+          </span>
         </div>
       )}
     </div>

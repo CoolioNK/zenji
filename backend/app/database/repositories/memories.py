@@ -20,6 +20,7 @@ from typing import Any
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
+from app.core.context import get_current_user_id
 from app.core.logging import get_logger
 from app.database.models import MemoryModel, new_id, utcnow
 
@@ -47,6 +48,10 @@ class FtsSearchProvider:
             session.execute(text(_FTS_TABLE))
             self.available = True
         except Exception as exc:  # noqa: BLE001 – Fallback entscheidet zur Laufzeit
+            # Nach einem fehlgeschlagenen Statement ist die Transaktion
+            # abgewiesen – zurückrollen, damit der Session-Kontext weiterläuft
+            # (relevant auf Postgres, wo FTS5 nicht existiert).
+            session.rollback()
             log.info("FTS5 nicht verfügbar (%s) – LIKE-Fallback aktiv.", exc.__class__.__name__)
             self.available = False
 
@@ -180,6 +185,7 @@ class MemoryRepository:
     ) -> MemoryModel:
         memory = MemoryModel(
             id=new_id(),
+            user_id=get_current_user_id(),
             content=content,
             content_hash=content_hash,
             category=category,

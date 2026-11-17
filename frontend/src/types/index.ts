@@ -8,6 +8,16 @@ export interface Message {
   role: Role;
   content: string;
   created_at: string;
+  /** Live-/Abschluss-Recherche der Assistant-Antwort (v0.5.0). */
+  researchEvents?: ResearchProgressEvent[];
+  researchSummary?: ChatResearchSummary | null;
+}
+
+/** Echtes Recherche-Statusereignis aus dem SSE-Stream. */
+export interface ResearchProgressEvent {
+  step: string;
+  detail: string;
+  [key: string]: unknown;
 }
 
 export interface Conversation {
@@ -46,9 +56,16 @@ export interface Settings {
   persona: { system_prompt: string };
 }
 
+// Nur die Felder, die der Nutzer in den Einstellungen ändern kann
+export interface SettingsPatch {
+  llm?: { temperature?: number };
+  persona?: { system_prompt?: string };
+}
+
 export interface Health {
   status: "ok" | "degraded";
   version: string;
+  supabase?: boolean;
   storage: { available: boolean; root: string; message: string };
   database: { ok: boolean; path: string; message: string };
   ollama: { available: boolean; version: string | null; message: string };

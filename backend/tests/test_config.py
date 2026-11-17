@@ -88,5 +88,5 @@ def test_cors_origins_werden_geparst():
 
 def test_default_persona_ist_gesetzt():
     settings = Settings(_env_file=None)
-    assert "ZENJI" in settings.persona_system_prompt
+    assert "Zenji Ango" in settings.persona_system_prompt
     assert settings.persona_system_prompt == DEFAULT_PERSONA

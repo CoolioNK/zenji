@@ -146,7 +146,7 @@ Live-Recherche).
 
 ## 6. Grenzen (bewusst, nicht versteckt)
 
-- Ohne laufenden SearXNG-Docker (oder Brave-Schlüssel) findet keine
+- Ohne laufenden SearXNG-Dienst (oder Brave-Schlüssel) findet keine
   Recherche statt – der Status sagt es ehrlich, der Chat läuft weiter.
 - Playwright fehlt: JavaScript-lastige Seiten bleiben evtl. leer
   (httpx-Text oder blockiert), das steht im Report.
@@ -157,8 +157,8 @@ Live-Recherche).
 
 ## 7. Empfehlungen für Phase 4+
 
-- SearXNG-Docker in `scripts/` verankern (`scripts/searxng` wird im
-  Statusdetail erwähnt; Docker ist installiert).
+- SearXNG-Dienst lokal bereitstellen (ohne Docker — Nutzer möchte keinen
+  Container-Betrieb; ggf. natives Binary/Systemdienst in `scripts/`).
 - Playwright optional installieren für JS-lastige Seiten.
 - Recherche-„Merken"-Aktion: bewusste Übernahme von Quellen ins Gedächtnis
   (aktuell bewusst ausgenommen).

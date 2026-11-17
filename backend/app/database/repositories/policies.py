@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.context import get_current_user_id, scope_entity_id
 from app.database.models import PolicyModel
 
 
@@ -33,6 +34,9 @@ class PolicyRepository:
         return session.get(PolicyModel, policy_id)
 
     def create(self, session: Session, **fields) -> PolicyModel:  # noqa: ANN003
+        if fields.get("id"):
+            fields["id"] = scope_entity_id(str(fields["id"]))
+        fields["user_id"] = get_current_user_id()
         policy = PolicyModel(**fields)
         session.add(policy)
         session.flush()
